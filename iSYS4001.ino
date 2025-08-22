@@ -8,14 +8,12 @@ iSYSTargetList_t targetList;
 
 // Configuration
 const uint8_t DESTINATION_ADDRESS = 0x80;  // Adjust per your device config
-const uint32_t TIMEOUT_MS = 3000;          // Response timeout
+const uint32_t TIMEOUT_MS = 1000;          // Response timeout
 const iSYSOutputNumber_t OUTPUT_NUMBER = ISYS_OUTPUT_1;
 
 void setup() {
   Serial.begin(115200);
   while (!Serial) { delay(10); }
-  Serial.println("iSYS4001 Radar Target List Example");
-  Serial.println("Serial2 (RX=16, TX=17) used for radar link");
 
   // Initialize Serial2 explicitly with pins on ESP32
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
