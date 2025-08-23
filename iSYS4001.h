@@ -95,9 +95,9 @@ public:
     // Function to send command, receive response, and decode target list
     iSYSResult_t getTargetList32(
         iSYSTargetList_t *pTargetList,
-        iSYSOutputNumber_t outputnumber,
         uint8_t destAddress,
-        uint32_t timeout
+        uint32_t timeout,
+        iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1  // Default to output 1 if not specified
     );
 
 private:

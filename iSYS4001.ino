@@ -8,8 +8,9 @@ iSYSTargetList_t targetList;
 
 // Configuration
 const uint8_t DESTINATION_ADDRESS = 0x80;  // Adjust per your device config
-const uint32_t TIMEOUT_MS = 1000;          // Response timeout
-const iSYSOutputNumber_t OUTPUT_NUMBER = ISYS_OUTPUT_1;
+const uint32_t TIMEOUT_MS = 300;          // Response timeout
+// Note: Output number defaults to 1 (ISYS_OUTPUT_1) in the library
+// To use different output, call: radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS, ISYS_OUTPUT_2);
 
 void setup() {
   Serial.begin(115200);
@@ -21,7 +22,7 @@ void setup() {
   // Print configuration
   Serial.print("Dest Addr: 0x"); Serial.println(DESTINATION_ADDRESS, HEX);
   Serial.print("Timeout: "); Serial.print(TIMEOUT_MS); Serial.println(" ms");
-  Serial.print("Output: "); Serial.println(OUTPUT_NUMBER);
+  Serial.println("Output: 1 (default)");
 
   // Flush any stale bytes from radar UART
   while (Serial2.available()) { Serial2.read(); }
@@ -35,16 +36,16 @@ void loop() {
   // Flush any leftover bytes before each request
   while (Serial2.available()) { Serial2.read(); }
 
+  // Call with default output (output 1) - no need to specify OUTPUT_NUMBER
   iSYSResult_t res = radar.getTargetList32(
     &targetList,
-    OUTPUT_NUMBER,
     DESTINATION_ADDRESS,
     TIMEOUT_MS
   );
 
   if (res != ERR_OK) {
     Serial.print("First attempt failed (code "); Serial.print(res); Serial.println(") - retrying once...");
-    res = radar.getTargetList32(&targetList, OUTPUT_NUMBER, DESTINATION_ADDRESS, TIMEOUT_MS);
+    res = radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS);
   }
 
   if (res == ERR_OK) {
@@ -70,5 +71,5 @@ void loop() {
     Serial.println(res);
   }
 
-  delay(1000);
+  delay(300);
 }
