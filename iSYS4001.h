@@ -6,48 +6,72 @@
 // Define MAX_TARGETS constant
 #define MAX_TARGETS (0x23)
 
-// Result/error codes for API calls
+/**
+ * @brief Result/error codes for iSYS radar sensor API calls
+ * 
+ * This enum provides comprehensive error codes for all iSYS radar sensor operations.
+ * Error codes are organized into logical groups for better maintainability.
+ * 
+ * @note Based on iSYS protocol specification with timeout recommendations:
+ *       - iSYS-400x: 75ms cycle time, 100ms minimum timeout
+ */
 typedef enum iSYSResult
 {
-    ERR_OK                                  = 0x0000,
-    ERR_FUNCTION_DEPRECATED                 ,
-    ERR_DLL_NOT_FINISHED                    ,
-    ERR_HANDLE_NOT_INITIALIZED              ,
-    ERR_COMPORT_DOESNT_EXIST                ,
-    ERR_COMPORT_CANT_INITIALIZE             ,
-    ERR_COMPORT_ACCESS_DENIED               ,
-    ERR_COMPORT_BAUDRATE_NOT_VALID          ,
-    ERR_COMPORT_CANT_OPEN                   ,
-    ERR_COMPORT_CANT_SET_FLOW_CONTROL       ,
-    ERR_COMPORT_CANT_SET_PARITY             ,
-    ERR_COMPORT_CANT_SET_STOP_BITS          ,
-    ERR_COMPORT_CANT_SET_DATA_BITS          ,
-    ERR_COMPORT_CANT_SET_BAUDRATE           ,
-    ERR_COMPORT_ALREADY_INITIALIZED         ,
-    ERR_COMPORT_EQUALS_NULL                 ,
-    ERR_COMPORT_NOT_OPEN                    ,
-    ERR_COMPORT_NOT_READABLE                ,
-    ERR_COMPORT_NOT_WRITEABLE               ,
-    ERR_COMPORT_CANT_WRITE                  ,
-    ERR_COMPORT_CANT_READ                   ,
-    ERR_COMMAND_NOT_WRITTEN                 ,
-    ERR_COMMAND_NOT_READ                    ,
-    ERR_COMMAND_NO_DATA_RECEIVED            ,
-    ERR_COMMAND_NO_VALID_FRAME_FOUND        ,
-    ERR_COMMAND_RX_FRAME_DAMAGED            ,
-    ERR_COMMAND_FAILURE                     ,
-    ERR_UNDEFINED_READ                      ,
-    ERR_COMPORT_LESS_DATA_READ              ,
-    ERR_COMPORT_SYSTEM_INIT_FAILED          ,
-    ERR_COMPORT_SYSTEM_ALREADY_INITIALIZED  ,
-    ERR_COMMAND_RX_FRAME_LENGTH             ,
-    ERR_COMMAND_MAX_DATA_OVERFLOW           ,
-    ERR_COMMAND_MAX_IQPAIRS_OVERFLOW        ,
-    ERR_COMMAND_NOT_ACCEPTED                ,
-    ERR_NULL_POINTER                        ,
-    ERR_CALC_CORRECTION_PARAMS              ,
-    ERR_PARAMETER_OUT_OF_RANGE              ,
-    ERR_COMMAND_UNEXPECTED_FRAMETYPE
+    // ===== SUCCESS CODES =====
+    ERR_OK                                  = 0x0000,   // (0)
+    
+    // ===== SYSTEM INITIALIZATION ERRORS =====
+    ERR_FUNCTION_DEPRECATED                 = 0x0001,   // (1)
+    ERR_DLL_NOT_FINISHED                    = 0x0002,   // (2)
+    ERR_HANDLE_NOT_INITIALIZED              = 0x0003,   // (3)
+    ERR_COMPORT_SYSTEM_INIT_FAILED          = 0x0004,   // (4)
+    ERR_COMPORT_SYSTEM_ALREADY_INITIALIZED  = 0x0005,   // (5)
+    
+    // ===== COM PORT CONFIGURATION ERRORS =====
+    ERR_COMPORT_DOESNT_EXIST                = 0x0010,   // (16)
+    ERR_COMPORT_CANT_INITIALIZE             = 0x0011,   // (17)
+    ERR_COMPORT_ACCESS_DENIED               = 0x0012,   // (18)
+    ERR_COMPORT_BAUDRATE_NOT_VALID          = 0x0013,   // (19)
+    ERR_COMPORT_CANT_OPEN                   = 0x0014,   // (20)
+    ERR_COMPORT_ALREADY_INITIALIZED         = 0x0015,   // (21)
+    ERR_COMPORT_EQUALS_NULL                 = 0x0016,   // (22)
+    
+    // ===== COM PORT PARAMETER SETTING ERRORS =====
+    ERR_COMPORT_CANT_SET_FLOW_CONTROL       = 0x0020,   // (32)
+    ERR_COMPORT_CANT_SET_PARITY             = 0x0021,   // (33)
+    ERR_COMPORT_CANT_SET_STOP_BITS          = 0x0022,   // (34)
+    ERR_COMPORT_CANT_SET_DATA_BITS          = 0x0023,   // (35)
+    ERR_COMPORT_CANT_SET_BAUDRATE           = 0x0024,   // (36)
+    
+    // ===== COM PORT I/O OPERATION ERRORS =====
+    ERR_COMPORT_NOT_OPEN                    = 0x0030,   // (48)
+    ERR_COMPORT_NOT_READABLE                = 0x0031,   // (49)
+    ERR_COMPORT_NOT_WRITEABLE               = 0x0032,   // (50)
+    ERR_COMPORT_CANT_WRITE                  = 0x0033,   // (51)
+    ERR_COMPORT_CANT_READ                   = 0x0034,   // (52)
+    ERR_COMPORT_LESS_DATA_READ              = 0x0035,   // (53)
+    
+    // ===== COMMAND TRANSMISSION ERRORS =====
+    ERR_COMMAND_NOT_WRITTEN                 = 0x0040,   // (64)
+    ERR_COMMAND_NOT_READ                    = 0x0041,   // (65)
+    ERR_COMMAND_NOT_ACCEPTED                = 0x0042,   // (66)
+    ERR_COMMAND_UNEXPECTED_FRAMETYPE        = 0x0043,   // (67)
+    
+    // ===== RESPONSE RECEPTION ERRORS =====
+    ERR_COMMAND_NO_DATA_RECEIVED            = 0x0050,   // (80)
+    ERR_COMMAND_NO_VALID_FRAME_FOUND        = 0x0051,   // (81)
+    ERR_COMMAND_RX_FRAME_DAMAGED            = 0x0052,   // (82)
+    ERR_COMMAND_RX_FRAME_LENGTH             = 0x0053,   // (83)
+    ERR_COMMAND_MAX_DATA_OVERFLOW           = 0x0054,   // (84)
+    ERR_COMMAND_MAX_IQPAIRS_OVERFLOW        = 0x0055,   // (85)
+    ERR_UNDEFINED_READ                      = 0x0056,   // (86)
+    
+    // ===== GENERAL OPERATION ERRORS =====
+    ERR_COMMAND_FAILURE                     = 0x0060,   // (96)
+    ERR_NULL_POINTER                        = 0x0061,   // (97)
+    ERR_CALC_CORRECTION_PARAMS              = 0x0062,   // (98)
+    ERR_PARAMETER_OUT_OF_RANGE              = 0x0063    // (99)
+    
 } iSYSResult_t;
 
 typedef enum iSYSTargetListError

@@ -8,7 +8,7 @@ iSYSTargetList_t targetList;
 
 // Configuration
 const uint8_t DESTINATION_ADDRESS = 0x80;  // Adjust per your device config
-const uint32_t TIMEOUT_MS = 300;          // Response timeout
+const uint32_t TIMEOUT_MS = 100;          // Response timeout
 // Note: Output number defaults to 1 (ISYS_OUTPUT_1) in the library
 // To use different output, call: radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS, ISYS_OUTPUT_2);
 
@@ -71,5 +71,5 @@ void loop() {
     Serial.println(res);
   }
 
-  delay(300);
+  delay(75);
 }
