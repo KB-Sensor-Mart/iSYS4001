@@ -311,3 +311,198 @@ iSYSResult_t iSYS4001::decodeTargetFrame(
 }
 
 
+
+
+
+
+
+
+// ===== EEPROM COMMAND FUNCTIONS =====
+
+// Main function to send EEPROM commands to the radar sensor
+// Parameters: subFunction - EEPROM sub-function code (factory settings, save sensor, etc.)
+//             destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::sendEEPROMCommand(iSYSEEPROMSubFunction_t subFunction,uint8_t destAddress,uint32_t timeout) 
+{
+    // Send the EEPROM command frame to the radar sensor
+    iSYSResult_t res = sendEEPROMCommandFrame(subFunction, destAddress);
+    if (res != ERR_OK) 
+    {
+        return res;  // If sending failed, return error immediately
+    }
+    
+    // Receive and verify the acknowledgement response from the radar sensor
+    res = receiveEEPROMAcknowledgement(timeout);
+    if (res != ERR_OK) 
+    {
+        return res;  // If receiving/verification failed, return error
+    }
+    
+    return ERR_OK;  // Success - EEPROM command acknowledged
+}
+
+// Convenience function to set factory settings
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::setFactorySettings(uint8_t destAddress, uint32_t timeout) 
+{
+    return sendEEPROMCommand(ISYS_EEPROM_SET_FACTORY_SETTINGS, destAddress, timeout);
+}
+
+// Convenience function to save sensor settings
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::saveSensorSettings(uint8_t destAddress, uint32_t timeout) 
+{
+    return sendEEPROMCommand(ISYS_EEPROM_SAVE_SENSOR_SETTINGS, destAddress, timeout);
+}
+
+// Convenience function to save application settings
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::saveApplicationSettings(uint8_t destAddress, uint32_t timeout) 
+{
+    return sendEEPROMCommand(ISYS_EEPROM_SAVE_APPLICATION_SETTINGS, destAddress, timeout);
+}
+
+// Convenience function to save all settings (sensor + application)
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::saveAllSettings(uint8_t destAddress, uint32_t timeout) 
+{
+    return sendEEPROMCommand(ISYS_EEPROM_SAVE_ALL_SETTINGS, destAddress, timeout);
+}
+
+// Function to send EEPROM command frame to the radar sensor
+// Parameters: subFunction - EEPROM sub-function code
+//             destAddress - destination address for the radar sensor
+// Returns: iSYSResult_t - error code (always ERR_OK for this function)
+iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunction, uint8_t destAddress) 
+{
+    // Based on the protocol documentation:
+    // Frame structure: SD2 LE LEr SD2 DA SA FC PDU FCS ED
+    // For EEPROM commands: FC = 0xDF, PDU = sub-function code
+    
+    uint8_t command[10];  // Array to hold the complete command frame
+    uint8_t index = 0;    // Index for building the command array
+    
+    // Build the command frame byte by byte according to iSYS protocol
+    command[index++] = 0x68;  // SD2 - Start Delimiter 2
+    command[index++] = 0x04;  // LE - Length (4 bytes from DA to PDU)
+    command[index++] = 0x04;  // LEr - Length repeat (must match LE)
+    command[index++] = 0x68;  // SD2 - Start Delimiter 2 (repeated)
+    command[index++] = destAddress;  // DA - Destination Address (radar sensor address)
+    command[index++] = 0x01;  // SA - Source Address (master address)
+    command[index++] = 0xDF;  // FC - Function Code (EEPROM operations)
+    command[index++] = subFunction;  // PDU - Sub-function code
+    
+    // Calculate FCS (Frame Check Sequence) - sum of bytes from DA to PDU
+    uint8_t fcs = calculateFCS(command, 4, 7);
+    command[index++] = fcs;  // FCS - Frame Check Sequence for error detection
+    command[index++] = 0x16; // ED - End Delimiter
+    
+    // Debug: Print the EEPROM command frame being sent to radar
+    Serial.print("Sending EEPROM command to radar: ");
+    for (int i = 0; i < 10; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) 
+        {
+            Serial.print("0");  // Add leading zero for single digit hex
+        }
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Send the complete command frame over serial interface
+    _serial.write(command, 10);
+    _serial.flush();  // Ensure all data is transmitted before continuing
+    return ERR_OK;
+}
+
+// Function to receive and verify EEPROM acknowledgement from radar sensor
+// Parameters: timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint32_t timeout) 
+{
+    uint32_t startTime = millis();  // Record start time for timeout calculation
+    uint8_t buffer[256];            // Buffer to store incoming response data
+    uint16_t index = 0;             // Index for storing received bytes
+    uint8_t byte;
+    
+    // Wait for response with timeout protection
+    while ((millis() - startTime) < timeout) 
+    {
+        if (_serial.available()) 
+        {  // Check if data is available to read
+            byte = _serial.read();  // Read one byte from serial
+            buffer[index++] = byte;         // Store byte in buffer
+            
+            // Check for end delimiter (0x16) which indicates end of frame
+            if (byte == 0x16 && index >= 9) 
+            {
+                // Debug: Print the received acknowledgement frame from radar
+                Serial.print("Received EEPROM acknowledgement from radar: ");
+                for (int i = 0; i < index; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) 
+                    {
+                        Serial.print("0");  // Add leading zero for single digit hex
+                    }
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+                
+                // Verify the acknowledgement frame structure
+                // Expected: 68 03 03 68 01 80 DF 60 16
+                if (index == 9 && 
+                    buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == 0x80 &&
+                    buffer[6] == 0xDF && buffer[7] == 0x60 && buffer[8] == 0x16) 
+                {
+                    Serial.println("EEPROM command acknowledged successfully");
+                    return ERR_OK;  // Valid acknowledgement received
+                }
+                else 
+                {
+                    Serial.println("Invalid EEPROM acknowledgement frame received");
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;  // Invalid frame structure
+                }
+            }
+            
+            // Prevent buffer overflow by checking array bounds
+            if (index >= 256) 
+            {
+                return ERR_COMMAND_MAX_DATA_OVERFLOW;  // Buffer overflow error
+            }
+        }
+    }
+    
+    return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
+}
+
+// Helper function to calculate Frame Check Sequence (FCS)
+// Parameters: data - array containing the frame data
+//             startIndex - starting index for FCS calculation
+//             endIndex - ending index for FCS calculation (inclusive)
+// Returns: uint8_t - calculated FCS value
+uint8_t iSYS4001::calculateFCS(const uint8_t* data, uint8_t startIndex, uint8_t endIndex) 
+{
+    uint8_t fcs = 0;
+    for (uint8_t i = startIndex; i <= endIndex; i++) 
+    {
+        fcs = (uint8_t)(fcs + data[i]);  // Sum of bytes from startIndex to endIndex
+    }
+    return fcs;
+}
+
+
