@@ -506,3 +506,171 @@ uint8_t iSYS4001::calculateFCS(const uint8_t* data, uint8_t startIndex, uint8_t 
 }
 
 
+
+
+// ===== DEVICE ADDRESS FUNCTIONS =====
+
+// Function to set a new RS485 device address on the sensor
+// Parameters: deviceaddress - the new sensor address to set
+//             destAddress   - the current address of the sensor (or broadcast if supported)
+//             timeout       - maximum time to wait for acknowledgement in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t destAddress , uint32_t timeout)
+{
+    // Frame based on documentation example:
+    // 68 07 07 68 DA 01 D3 00 01 00 <NEW_ADDR> FCS 16
+    uint8_t command[13];
+    uint8_t index = 0;
+
+    command[index++] = 0x68;   // SD2
+    command[index++] = 0x07;   // LE
+    command[index++] = 0x07;   // LEr
+    command[index++] = 0x68;   // SD2
+    command[index++] = destAddress; // DA (old/current address)
+    command[index++] = 0x01;   // SA (master)
+    command[index++] = 0xD3;   // FC (write/read address)
+    command[index++] = 0x00;   // PDU[0] sub-function high byte
+    command[index++] = 0x01;   // PDU[1] sub-function low byte
+    command[index++] = 0x00;   // PDU[2] reserved
+    command[index++] = deviceaddress; // PDU[3] new address
+
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    command[index++] = fcs;    // FCS
+    command[index++] = 0x16;   // ED
+
+    // Debug: print outbound frame
+    Serial.print("Sending SET address command: ");
+    for (int i = 0; i < (int)sizeof(command); i++)
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    _serial.write(command, sizeof(command));
+    _serial.flush();
+
+    // Wait for acknowledgement frame: 68 03 03 68 01 <NEW_ADDR> D3 <FCS> 16
+    uint32_t startTime = millis();
+    uint8_t buffer[32];
+    uint8_t count = 0;
+    while ((millis() - startTime) < timeout)
+    {
+        if (_serial.available())
+        {
+            uint8_t b = _serial.read();
+            if (count < sizeof(buffer)) buffer[count++] = b; else return ERR_COMMAND_MAX_DATA_OVERFLOW;
+            if (b == 0x16 && count >= 9)
+            {
+                // Optional: print frame
+                Serial.print("Received SET address ack: ");
+                for (uint8_t i = 0; i < count; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) Serial.print("0");
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+
+                // Validate minimal structure
+                if (count == 9 && buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == deviceaddress &&
+                    buffer[6] == 0xD3 && buffer[8] == 0x16)
+                {
+                    uint8_t calc = calculateFCS(buffer, 4, 6); // DA..FC for LE=03
+                    if (calc == buffer[7]) return ERR_OK;
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;
+                }
+                return ERR_COMMAND_RX_FRAME_DAMAGED;
+            }
+        }
+    }
+
+    return ERR_COMMAND_NO_DATA_RECEIVED;
+}
+
+// Function to request and read the current RS485 device address
+// Parameters: deviceaddress - pointer where the found address will be stored
+//             destAddress   - destination address (use 0x00 for broadcast if unknown)
+//             timeout       - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t destAddress, uint32_t timeout)
+{
+    if (deviceaddress == NULL) return ERR_NULL_POINTER;
+
+    // Request frame example:
+    // 68 05 05 68 DA 01 D2 00 01 FCS 16
+    uint8_t command[11];
+    uint8_t index = 0;
+    command[index++] = 0x68;   // SD2
+    command[index++] = 0x05;   // LE
+    command[index++] = 0x05;   // LEr
+    command[index++] = 0x68;   // SD2
+    command[index++] = 0x00; // DA (often 0x00 broadcast)
+    command[index++] = 0x01;   // SA (master)
+    command[index++] = 0xD2;   // FC (read address)
+    command[index++] = 0x00;   // PDU[0] sub-function high
+    command[index++] = 0x01;   // PDU[1] sub-function low
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[index++] = fcs;    // FCS
+    command[index++] = 0x16;   // ED
+
+    // Debug: print outbound frame
+    Serial.print("Sending GET address command: ");
+    for (int i = 0; i < (int)sizeof(command); i++)
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    _serial.write(command, sizeof(command));
+    _serial.flush();
+
+    // Expected response example:
+    // 68 05 05 68 01 SA D2 00 <ADDR> FCS 16
+    uint32_t startTime = millis();
+    uint8_t buffer[32];
+    uint8_t count = 0;
+    while ((millis() - startTime) < timeout)
+    {
+        if (_serial.available())
+        {
+            uint8_t b = _serial.read();
+            if (count < sizeof(buffer)) buffer[count++] = b; else return ERR_COMMAND_MAX_DATA_OVERFLOW;
+            if (b == 0x16 && count >= 11)
+            {
+                // Optional: print frame
+                Serial.print("Received GET address response: ");
+                for (uint8_t i = 0; i < count; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) Serial.print("0");
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+
+                if (count == 11 && buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
+                    buffer[3] == 0x68 && buffer[6] == 0xD2 && buffer[10] == 0x16)
+                {
+                    uint8_t calc = calculateFCS(buffer, 4, 8); // DA..PDU
+                    if (calc == buffer[9])
+                    {
+                        *deviceaddress = buffer[8];
+                        return ERR_OK;
+                    }
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;
+                }
+                return ERR_COMMAND_RX_FRAME_DAMAGED;
+            }
+        }
+    }
+
+    return ERR_COMMAND_NO_DATA_RECEIVED;
+}

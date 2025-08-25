@@ -127,31 +127,27 @@ public:
     
     // Function to send command, receive response, and decode target list
     iSYSResult_t getTargetList32(
-        iSYSTargetList_t *pTargetList,
-        uint8_t destAddress,
-        uint32_t timeout,
-        iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1  // Default to output 1 if not specified
-    );
+        iSYSTargetList_t *pTargetList,uint8_t destAddress,uint32_t timeout,iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1  // Default to output 1 if not specified
+                                );
 
     // EEPROM command functions
     iSYSResult_t sendEEPROMCommand(iSYSEEPROMSubFunction_t subFunction,uint8_t destAddress,uint32_t timeout);
-    
     iSYSResult_t setFactorySettings(uint8_t destAddress, uint32_t timeout);
-    
     iSYSResult_t saveSensorSettings(uint8_t destAddress,uint32_t timeout);
-    
     iSYSResult_t saveApplicationSettings(uint8_t destAddress,uint32_t timeout);
-    
     iSYSResult_t saveAllSettings(uint8_t destAddress,uint32_t timeout);
+
+
+    // Device address functions
+    iSYSResult_t iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t destAddress , uint32_t timeout);
+    iSYSResult_t iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t destAddress, uint32_t timeout);
 
 private:
     uint32_t _baud;
     HardwareSerial& _serial;
     
     // Helper functions for communication and decoding
-    iSYSResult_t decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements,
-                                   uint16_t productcode, uint8_t bitrate,
-                                   iSYSTargetList_t *targetList);
+    iSYSResult_t decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements,uint16_t productcode, uint8_t bitrate,iSYSTargetList_t *targetList);
     iSYSResult_t sendTargetListRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
     iSYSResult_t receiveTargetListResponse(iSYSTargetList_t *pTargetList, uint32_t timeout);
     iSYSResult_t decodeTargetList(const uint8_t* data, uint16_t length, iSYSTargetList_t *pTargetList);
