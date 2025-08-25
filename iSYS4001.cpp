@@ -10,6 +10,11 @@ iSYS4001::iSYS4001(HardwareSerial& serial, uint32_t baud)
     // This constructor stores the serial interface and baud rate for later use
 }
 
+
+/***************************************************************  
+ *  GET TARGET LIST FUNCTION  
+ ***************************************************************/
+
 // Main function to get target list from iSYS4001 radar sensor
 // Parameters: pTargetList - pointer to structure that will hold the target data
 //             destAddress - destination address for the radar sensor
@@ -311,13 +316,9 @@ iSYSResult_t iSYS4001::decodeTargetFrame(
 }
 
 
-
-
-
-
-
-
-// ===== EEPROM COMMAND FUNCTIONS =====
+/***************************************************************  
+ *  EEPROM COMMAND FUNCTIONS 
+ ***************************************************************/
 
 // Main function to send EEPROM commands to the radar sensor
 // Parameters: subFunction - EEPROM sub-function code (factory settings, save sensor, etc.)
@@ -334,7 +335,7 @@ iSYSResult_t iSYS4001::sendEEPROMCommand(iSYSEEPROMSubFunction_t subFunction,uin
     }
     
     // Receive and verify the acknowledgement response from the radar sensor
-    res = receiveEEPROMAcknowledgement(timeout);
+    res = receiveEEPROMAcknowledgement(destAddress, timeout);
     if (res != ERR_OK) 
     {
         return res;  // If receiving/verification failed, return error
@@ -430,7 +431,7 @@ iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunctio
 // Function to receive and verify EEPROM acknowledgement from radar sensor
 // Parameters: timeout - maximum time to wait for response in milliseconds
 // Returns: iSYSResult_t - error code indicating success or failure
-iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint32_t timeout) 
+iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress,uint32_t timeout) 
 {
     uint32_t startTime = millis();  // Record start time for timeout calculation
     uint8_t buffer[256];            // Buffer to store incoming response data
@@ -466,7 +467,7 @@ iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint32_t timeout)
                 // Expected: 68 03 03 68 01 80 DF 60 16
                 if (index == 9 && 
                     buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
-                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == 0x80 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
                     buffer[6] == 0xDF && buffer[7] == 0x60 && buffer[8] == 0x16) 
                 {
                     Serial.println("EEPROM command acknowledged successfully");
@@ -505,10 +506,9 @@ uint8_t iSYS4001::calculateFCS(const uint8_t* data, uint8_t startIndex, uint8_t 
     return fcs;
 }
 
-
-
-
-// ===== DEVICE ADDRESS FUNCTIONS =====
+/***************************************************************  
+ *  DEVICE ADDRESS FUNCTIONS  
+ ***************************************************************/
 
 // Function to set a new RS485 device address on the sensor
 // Parameters: deviceaddress - the new sensor address to set
