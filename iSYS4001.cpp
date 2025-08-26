@@ -316,6 +316,204 @@ iSYSResult_t iSYS4001::decodeTargetFrame(
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/***************************************************************  
+ *  SET RANGE MIN/MAX FUNCTIONS
+ ***************************************************************/
+
+//``````````````````````````````````````````````````````````` SET RANGE MIN FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
+{
+    uint8_t command[13];
+    uint16_t scaledRange = range * 10;
+    uint8_t minHighByte = (scaledRange >> 8) & 0xFF;
+    uint8_t minLowByte = scaledRange & 0xFF;
+
+    // Build command frame
+    command[0] = 0x68; // SD2
+    command[1] = 0x07; // LE
+    command[2] = 0x07; // LEr
+    command[3] = 0x68; // SD2
+    command[4] = destAddress; // DA
+    command[5] = 0x01; // SA
+    command[6] = 0xD5; // FC
+    command[7] = outputnumber; // PDU (output number)
+    command[8] = 0x08; // Mode/flag for min range
+    command[9] = minHighByte; // High byte of range
+    command[10] = minLowByte; // Low byte of range
+
+    // Calculate checksum (sum of bytes 4 to 10)
+    uint8_t checksum = 0;
+    for (int i = 4; i <= 10; i++) {
+        checksum += command[i];
+    }
+    command[11] = checksum; // Checksum
+    command[12] = 0x16;
+    
+    Serial.print("Send min range command: ");
+    for (int i = 0; i < 13; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    
+    // Send command and read response
+    
+    _serial.write(command, 13);
+    _serial.flush();
+
+    //Response Buffer
+    uint8_t response[9];
+    size_t minIndex = 0;
+    uint32_t start = millis();
+
+
+    while ((millis() - start) < timeout && minIndex < sizeof(response)) {
+        if (_serial.available()) {
+            response[minIndex++] = _serial.read();
+
+            if (response[minIndex-1] == 0x16) break;
+        }
+    }
+    Serial.print("Received min range response: ");
+    for (int i = 0; i < minIndex; i++) 
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10) Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    return (minIndex > 0) ? ERR_OK : ERR_COMMAND_NO_DATA_RECEIVED; 
+}
+
+
+
+//``````````````````````````````````````````````````````````` SET RANGE MAX FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
+{
+    uint8_t command[13];
+    uint16_t scaledRange = range * 10;
+    uint8_t maxHighByte = (scaledRange >> 8) & 0xFF;
+    uint8_t maxLowByte = scaledRange & 0xFF;
+
+    // Build command frame
+    command[0] = 0x68; // SD2
+    command[1] = 0x07; // LE
+    command[2] = 0x07; // LEr
+    command[3] = 0x68; // SD2
+    command[4] = destAddress; // DA
+    command[5] = 0x01; // SA
+    command[6] = 0xD5; // FC
+    command[7] = outputnumber; // PDU (output number)
+    command[8] = 0x09; // Mode/flag for min range
+    command[9] = maxHighByte; // High byte of range
+    command[10] = maxLowByte; // Low byte of range
+
+    // Calculate checksum (sum of bytes 4 to 10)
+    uint8_t checksum = 0;
+    for (int i = 4; i <= 10; i++) {
+        checksum += command[i];
+    }
+    command[11] = checksum; // Checksum
+    command[12] = 0x16;
+    
+    Serial.print("Send max range command: ");
+    for (int i = 0; i < 13; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    // Send command and read response
+    
+    _serial.write(command, 13);
+    _serial.flush();
+
+    uint8_t response[9];
+    uint32_t start = millis();
+    size_t maxIndex = 0;
+    while ((millis() - start) < timeout && maxIndex < 9) {
+        if (_serial.available()) {
+            response[maxIndex++] = _serial.read();
+            if (response[maxIndex-1] == 0x16) break; // End delimiter
+        }
+    }
+    Serial.print("Received max range response: ");
+    for (int i = 0; i < maxIndex; i++) 
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10) Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    return (maxIndex > 0) ? ERR_OK : ERR_COMMAND_NO_DATA_RECEIVED; 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /***************************************************************  
  *  EEPROM COMMAND FUNCTIONS 
  ***************************************************************/
@@ -450,7 +648,6 @@ iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress,uint32_t
             if (byte == 0x16 && index >= 9) 
             {
                 // Debug: Print the received acknowledgement frame from radar
-                Serial.print("Received EEPROM acknowledgement from radar: ");
                 for (int i = 0; i < index; i++)
                 {
                     Serial.print("0x");
@@ -470,12 +667,10 @@ iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress,uint32_t
                     buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
                     buffer[6] == 0xDF && buffer[7] == 0x60 && buffer[8] == 0x16) 
                 {
-                    Serial.println("EEPROM command acknowledged successfully");
                     return ERR_OK;  // Valid acknowledgement received
                 }
                 else 
                 {
-                    Serial.println("Invalid EEPROM acknowledgement frame received");
                     return ERR_COMMAND_RX_FRAME_DAMAGED;  // Invalid frame structure
                 }
             }
@@ -505,6 +700,57 @@ uint8_t iSYS4001::calculateFCS(const uint8_t* data, uint8_t startIndex, uint8_t 
     }
     return fcs;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /***************************************************************  
  *  DEVICE ADDRESS FUNCTIONS  
@@ -592,7 +838,7 @@ iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t dest
     return ERR_COMMAND_NO_DATA_RECEIVED;
 }
 
-// Function to request and read the current RS485 device address
+// Function to request and read the current device address
 // Parameters: deviceaddress - pointer where the found address will be stored
 //             destAddress   - destination address (use 0x00 for broadcast if unknown)
 //             timeout       - maximum time to wait for response in milliseconds

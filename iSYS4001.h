@@ -133,6 +133,14 @@ public:
 
     iSYSResult_t getTargetList32(iSYSTargetList_t *pTargetList,uint8_t destAddress,uint32_t timeout,iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
 
+
+/***************************************************************  
+ *  SET RANGE MIN/MAX FUNCTIONS  
+ ***************************************************************/
+
+    iSYSResult_t iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_setOutputRangeMax( iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);
+
 /***************************************************************  
  *  EEPROM COMMAND FUNCTIONS 
  ***************************************************************/
