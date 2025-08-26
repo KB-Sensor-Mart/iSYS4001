@@ -9,8 +9,8 @@ iSYSTargetList_t targetList;
 // Configuration
 const uint8_t DESTINATION_ADDRESS = 0x80;  // Adjust per your device config
 const uint32_t TIMEOUT_MS = 300;          // Response timeout
-uint8_t SetminRangeValue = 2;
-uint8_t SetmaxRangeValue = 140;
+uint8_t SetminRangeValue = 1.0;
+uint8_t SetmaxRangeValue = 14.0;
 
 
 

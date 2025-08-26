@@ -269,7 +269,7 @@ ISYS_API_EXPORT iSYSResult_t iSYS_SetDefaultTemperatureThreshold(iSYSHandle_t pH
 
 
 /*SD2 - D2 */
-ISYS_API_EXPORT iSYSResult_t iSYS_setDeviceAddress(iSYSHandle_t pHandle, uint8_t deviceaddress, uint8_t destAddress , uint32_t timeout);
+ISYS_API_EXPORT iSYSResult_t iSYS_getDeviceAddress(iSYSHandle_t pHandle, uint8_t deviceaddress, uint8_t destAddress , uint32_t timeout);
 ISYS_API_EXPORT iSYSResult_t iSYS_getDeviceAddress(iSYSHandle_t pHandle,uint8_t *deviceaddress, uint8_t destAddress, uint32_t timeout);
 ISYS_API_EXPORT iSYSResult_t iSYS_getFrequencyChannel(iSYSHandle_t pHandle, iSYSFrequencyChannel_t *channel, uint8_t destAddress, uint32_t timeout);   /* Measurement mode must be stopped before (cmdStopAcquisition) */
 ISYS_API_EXPORT iSYSResult_t iSYS_getThresholdMin(iSYSHandle_t pHandle, sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout);

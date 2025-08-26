@@ -21,12 +21,7 @@ iSYS4001::iSYS4001(HardwareSerial& serial, uint32_t baud)
 //             timeout - maximum time to wait for response in milliseconds
 //             outputnumber - specifies which output to use (defaults to ISYS_OUTPUT_1 if not specified)
 // Returns: iSYSResult_t - error code indicating success or failure
-iSYSResult_t iSYS4001::getTargetList32(
-    iSYSTargetList_t *pTargetList,
-    uint8_t destAddress,
-    uint32_t timeout,
-    iSYSOutputNumber_t outputnumber
-) 
+iSYSResult_t iSYS4001::getTargetList32(iSYSTargetList_t *pTargetList,uint8_t destAddress,uint32_t timeout,iSYSOutputNumber_t outputnumber) 
 {
     // Initialize target list structure with zeros to ensure clean state
     memset(pTargetList, 0, sizeof(iSYSTargetList_t));
@@ -63,23 +58,18 @@ iSYSResult_t iSYS4001::sendTargetListRequest(iSYSOutputNumber_t outputnumber, ui
     uint8_t index = 0;    // Index for building the command array
     
     // Build the command frame byte by byte according to iSYS protocol
-    command[index++] = 0x68;  // SD2 - Start Delimiter 2
-    command[index++] = 0x05;  // LE - Length (5 bytes from DA to PDU)
-    command[index++] = 0x05;  // LEr - Length repeat (must match LE)
-    command[index++] = 0x68;  // SD2 - Start Delimiter 2 (repeated)
-    command[index++] = destAddress;  // DA - Destination Address (radar sensor address)
-    command[index++] = 0x01;  // SA - Source Address (master address)
-    command[index++] = 0xDA;  // FC - Function Code (target list request)
-    command[index++] = outputnumber;  // PDU - Output number (specifies which output to use)
+    command[index++] = 0x68;  // SD2
+    command[index++] = 0x05;  // LE
+    command[index++] = 0x05;  // LEr
+    command[index++] = 0x68;  // 
+    command[index++] = destAddress;  // DA
+    command[index++] = 0x01;  // SA
+    command[index++] = 0xDA;  // FC
+    command[index++] = outputnumber;  // PDU - Output number
     command[index++] = 0x20;  // 32-bit resolution flag (0x20 = 32-bit mode)
     
     // Calculate FCS (Frame Check Sequence) - sum of bytes from DA to PDU
-    uint8_t fcs = 0;
-    for (int i = 4; i <= 8; i++) 
-    {
-        fcs = (uint8_t)(fcs + command[i]); // sum DA..PDU only
-    }
-
+    uint8_t fcs = calculateFCS(command, 3+1, index-1);
     command[index++] = fcs;  // FCS - Frame Check Sequence for error detection
     command[index++] = 0x16; // ED - End Delimiter
     
@@ -109,53 +99,62 @@ iSYSResult_t iSYS4001::sendTargetListRequest(iSYSOutputNumber_t outputnumber, ui
 // Returns: iSYSResult_t - error code indicating success or failure
 iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, uint32_t timeout) 
 {
-    uint32_t startTime = millis();  // Record start time for timeout calculation
-    uint8_t buffer[256];            // Buffer to store incoming response data
-    uint16_t index = 0;             // Index for storing received bytes
-    uint8_t byte;
-    
-    // Wait for response with timeout protection
-    while ((millis() - startTime) < timeout) 
-    {
-        if (_serial.available()) 
-        {  // Check if data is available to read
-            byte = _serial.read();  // Read one byte from serial
-            buffer[index++] = byte;         // Store byte in buffer
-            
-            // Check for end delimiter (0x16) which indicates end of frame
-            
-            // Prevent buffer overflow by checking array bounds
-            if (index >= 256) 
-            {
-                return ERR_COMMAND_MAX_DATA_OVERFLOW;  // Buffer overflow error
-            }
+    uint32_t startTime = millis();
+    std::vector<uint8_t> buffer;
+
+    // Step 1: Read the first 6 bytes (header)
+    while ((millis() - startTime) < timeout && buffer.size() < 6) {
+        if (_serial.available()) {
+            buffer.push_back(_serial.read());
         }
     }
 
-    if (byte == 0x16 && index >= 11) 
-    {
-        // Debug: Print the received response frame from radar
-        Serial.print("Received response from radar: ");
-        for (int i = 0; i < index; i++)
-        {
-            Serial.print("0x");
-            if (buffer[i] < 0x10) 
-            {
-                Serial.print("0");  // Add leading zero for single digit hex
-            }
-            Serial.print(buffer[i], HEX);
-            Serial.print(" ");
-        }
-        Serial.println();
-        
-        // Minimum valid response length reached (11 bytes minimum)
-        // Decode the received frame using the decodeTargetFrame function
-        iSYSResult_t res = decodeTargetFrame(buffer, index, 4001, 32, pTargetList);
-        return res;  // Return the result of decoding
+    if (buffer.size() < 6) {
+        return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout before header complete
     }
-    
-    return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
+
+    // Step 2: Extract number of targets (6th byte)
+    uint8_t nrOfTargets = buffer[5];
+    if (nrOfTargets > MAX_TARGETS) {
+        return ERR_COMMAND_MAX_DATA_OVERFLOW; // Too many targets
+    }
+
+    // Step 3: Calculate expected frame length
+    uint16_t expectedLength = 6 + (14 * nrOfTargets) + 2;
+    buffer.reserve(expectedLength);
+
+    // Step 4: Read until full frame is received
+    while ((millis() - startTime) < timeout && buffer.size() < expectedLength) {
+        if (_serial.available()) {
+            buffer.push_back(_serial.read());
+        }
+    }
+
+    if (buffer.size() != expectedLength) {
+        return ERR_COMMAND_NO_DATA_RECEIVED; // Incomplete frame
+    }
+
+    // Step 5: Validate end delimiter (last byte must be 0x16)
+    if (buffer.back() != 0x16) {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    // Debug: print received frame
+    Serial.print("Received response from radar: ");
+    for (size_t i = 0; i < buffer.size(); i++) {
+        Serial.printf("0x%02X ", buffer[i]);
+    }
+    Serial.println();
+
+        
+// Minimum valid response length reached (11 bytes minimum)
+// Decode the received frame using the decodeTargetFrame function
+    iSYSResult_t res = decodeTargetFrame(buffer.data(),buffer.size(),4001, 32, pTargetList);
+    return res;  // Return the result of decoding
 }
+
+ 
+
 
 // Function to decode target frame data from radar sensor response
 // Parameters: frame_array - array containing the received frame data
@@ -164,13 +163,7 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
 //             bitrate - resolution mode (16-bit or 32-bit)
 //             targetList - pointer to structure that will hold decoded target data
 // Returns: iSYSResult_t - error code indicating success or failure
-iSYSResult_t iSYS4001::decodeTargetFrame(
-    uint8_t *frame_array, 
-    uint16_t nrOfElements,
-    uint16_t productcode, 
-    uint8_t bitrate,
-    iSYSTargetList_t *targetList
-) 
+iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements,uint16_t productcode, uint8_t bitrate,iSYSTargetList_t *targetList) 
 {
     // Validate input parameters
     if (frame_array == NULL || targetList == NULL)
@@ -183,6 +176,11 @@ iSYSResult_t iSYS4001::decodeTargetFrame(
         return ERR_COMMAND_RX_FRAME_LENGTH;  // Frame too short to be valid
     }
 
+     if (frame_array[nrOfElements - 1] != 0x16) 
+    {
+        return ERR_COMMAND_NO_VALID_FRAME_FOUND; 
+    }
+
     // Determine frame type and calculate frame control offset
     uint16_t ui16_fc;
     if (frame_array[0] == 0x68) 
@@ -193,15 +191,9 @@ iSYSResult_t iSYS4001::decodeTargetFrame(
     {
         ui16_fc = 3; // fixed-length frame (different start byte)
     }
-    else
+    else 
     {
-        return ERR_COMMAND_NO_VALID_FRAME_FOUND; 
-    }
-
-    // Verify frame ends with proper end delimiter
-    if (frame_array[nrOfElements - 1] != 0x16) 
-    {
-        return ERR_COMMAND_NO_VALID_FRAME_FOUND;  // Invalid end delimiter
+        return ERR_COMMAND_NO_VALID_FRAME_FOUND;
     }
 
     // Extract frame header information
@@ -346,29 +338,28 @@ iSYSResult_t iSYS4001::decodeTargetFrame(
 iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
 {
     uint8_t command[13];
+    uint8_t index = 0;
     uint16_t scaledRange = range * 10;
     uint8_t minHighByte = (scaledRange >> 8) & 0xFF;
     uint8_t minLowByte = scaledRange & 0xFF;
 
     // Build command frame
-    command[0] = 0x68; // SD2
-    command[1] = 0x07; // LE
-    command[2] = 0x07; // LEr
-    command[3] = 0x68; // SD2
-    command[4] = destAddress; // DA
-    command[5] = 0x01; // SA
-    command[6] = 0xD5; // FC
-    command[7] = outputnumber; // PDU (output number)
-    command[8] = 0x08; // Mode/flag for min range
-    command[9] = minHighByte; // High byte of range
-    command[10] = minLowByte; // Low byte of range
+    command[index++] = 0x68; // SD2
+    command[index++] = 0x07; // LE
+    command[index++] = 0x07; // LEr
+    command[index++] = 0x68; // SD2
+    command[index++] = destAddress; // DA
+    command[index++] = 0x01; // SA
+    command[index++] = 0xD5; // FC
+    command[index++] = outputnumber; // PDU (output number)
+    command[index++] = 0x08; // Mode/flag for min range
+    command[index++] = minHighByte; // High byte of range
+    command[index++] = minLowByte; // Low byte of range
 
     // Calculate checksum (sum of bytes 4 to 10)
-    uint8_t checksum = 0;
-    for (int i = 4; i <= 10; i++) {
-        checksum += command[i];
-    }
-    command[11] = checksum; // Checksum
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    
+    command[11] = fcs; // Checksum
     command[12] = 0x16;
     
     Serial.print("Send min range command: ");
@@ -390,10 +381,10 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
     //Response Buffer
     uint8_t response[9];
     size_t minIndex = 0;
-    uint32_t start = millis();
+    uint32_t startTime = millis();
 
 
-    while ((millis() - start) < timeout && minIndex < sizeof(response)) {
+    while ((millis() - startTime) < timeout && minIndex < sizeof(response)) {
         if (_serial.available()) {
             response[minIndex++] = _serial.read();
 
@@ -419,30 +410,29 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
 iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
 {
     uint8_t command[13];
+    uint8_t index = 0;
     uint16_t scaledRange = range * 10;
     uint8_t maxHighByte = (scaledRange >> 8) & 0xFF;
     uint8_t maxLowByte = scaledRange & 0xFF;
 
     // Build command frame
-    command[0] = 0x68; // SD2
-    command[1] = 0x07; // LE
-    command[2] = 0x07; // LEr
-    command[3] = 0x68; // SD2
-    command[4] = destAddress; // DA
-    command[5] = 0x01; // SA
-    command[6] = 0xD5; // FC
-    command[7] = outputnumber; // PDU (output number)
-    command[8] = 0x09; // Mode/flag for min range
-    command[9] = maxHighByte; // High byte of range
-    command[10] = maxLowByte; // Low byte of range
+    command[index++] = 0x68; // SD2
+    command[index++] = 0x07; // LE
+    command[index++] = 0x07; // LEr
+    command[index++] = 0x68; // SD2
+    command[index++] = destAddress; // DA
+    command[index++] = 0x01; // SA
+    command[index++] = 0xD5; // FC
+    command[index++] = outputnumber; // PDU (output number)
+    command[index++] = 0x09; // Mode/flag for min range
+    command[index++] = maxHighByte; // High byte of range
+    command[index++] = maxLowByte; // Low byte of range
 
     // Calculate checksum (sum of bytes 4 to 10)
-    uint8_t checksum = 0;
-    for (int i = 4; i <= 10; i++) {
-        checksum += command[i];
-    }
-    command[11] = checksum; // Checksum
-    command[12] = 0x16;
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    
+    command[index++] = fcs; // Checksum
+    command[index++] = 0x16;
     
     Serial.print("Send max range command: ");
     for (int i = 0; i < 13; i++) 
@@ -460,9 +450,9 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     _serial.flush();
 
     uint8_t response[9];
-    uint32_t start = millis();
+    uint32_t startTime = millis();
     size_t maxIndex = 0;
-    while ((millis() - start) < timeout && maxIndex < 9) {
+    while ((millis() - startTime) < timeout && maxIndex < 9) {
         if (_serial.available()) {
             response[maxIndex++] = _serial.read();
             if (response[maxIndex-1] == 0x16) break; // End delimiter
@@ -479,34 +469,6 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     Serial.println();
     return (maxIndex > 0) ? ERR_OK : ERR_COMMAND_NO_DATA_RECEIVED; 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -588,25 +550,25 @@ iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunctio
     // Frame structure: SD2 LE LEr SD2 DA SA FC PDU FCS ED
     // For EEPROM commands: FC = 0xDF, PDU = sub-function code
     
-    uint8_t command[10];  // Array to hold the complete command frame
-    uint8_t index = 0;    // Index for building the command array
+    uint8_t command[10];
+    uint8_t index = 0;
     
     // Build the command frame byte by byte according to iSYS protocol
-    command[index++] = 0x68;  // SD2 - Start Delimiter 2
-    command[index++] = 0x04;  // LE - Length (4 bytes from DA to PDU)
-    command[index++] = 0x04;  // LEr - Length repeat (must match LE)
-    command[index++] = 0x68;  // SD2 - Start Delimiter 2 (repeated)
-    command[index++] = destAddress;  // DA - Destination Address (radar sensor address)
-    command[index++] = 0x01;  // SA - Source Address (master address)
-    command[index++] = 0xDF;  // FC - Function Code (EEPROM operations)
+    command[index++] = 0x68;  // SD2
+    command[index++] = 0x04;  // LE
+    command[index++] = 0x04;  // LEr
+    command[index++] = 0x68;  // SD2
+    command[index++] = destAddress;  // DA
+    command[index++] = 0x01;  // SA
+    command[index++] = 0xDF;  // FC
     command[index++] = subFunction;  // PDU - Sub-function code
     
     // Calculate FCS (Frame Check Sequence) - sum of bytes from DA to PDU
     uint8_t fcs = calculateFCS(command, 4, 7);
-    command[index++] = fcs;  // FCS - Frame Check Sequence for error detection
-    command[index++] = 0x16; // ED - End Delimiter
+    command[index++] = fcs;  // FCS
+    command[index++] = 0x16; // ED
     
-    // Debug: Print the EEPROM command frame being sent to radar
+    // Debug
     Serial.print("Sending EEPROM command to radar: ");
     for (int i = 0; i < 10; i++) 
     {
@@ -620,9 +582,9 @@ iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunctio
     }
     Serial.println();
     
-    // Send the complete command frame over serial interface
+    
     _serial.write(command, 10);
-    _serial.flush();  // Ensure all data is transmitted before continuing
+    _serial.flush();
     return ERR_OK;
 }
 
@@ -685,6 +647,23 @@ iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress,uint32_t
     
     return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+/***************************************************************  
+ *  CALCULATE CHECKSUM FUNCTION
+ ***************************************************************/
+
 
 // Helper function to calculate Frame Check Sequence (FCS)
 // Parameters: data - array containing the frame data
