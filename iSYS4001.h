@@ -65,12 +65,14 @@ typedef enum iSYSResult
     ERR_COMMAND_MAX_DATA_OVERFLOW           = 0x0054,   // (84)
     ERR_COMMAND_MAX_IQPAIRS_OVERFLOW        = 0x0055,   // (85)
     ERR_UNDEFINED_READ                      = 0x0056,   // (86)
+    ERR_INVALID_CHECKSUM                    = 0x0057,   // (87)
     
     // ===== GENERAL OPERATION ERRORS =====
     ERR_COMMAND_FAILURE                     = 0x0060,   // (96)
     ERR_NULL_POINTER                        = 0x0061,   // (97)
     ERR_CALC_CORRECTION_PARAMS              = 0x0062,   // (98)
-    ERR_PARAMETER_OUT_OF_RANGE              = 0x0063    // (99)
+    ERR_PARAMETER_OUT_OF_RANGE              = 0x0063,   // (99)
+    ERR_TIMEOUT                             = 0X0064,
     
 } iSYSResult_t;
 

@@ -102,7 +102,7 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
     uint32_t startTime = millis();
     std::vector<uint8_t> buffer;
 
-    // Step 1: Read the first 6 bytes (header)
+    // Read the first 6 bytes (header)
     while ((millis() - startTime) < timeout && buffer.size() < 6) {
         if (_serial.available()) {
             buffer.push_back(_serial.read());
@@ -113,17 +113,17 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
         return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout before header complete
     }
 
-    // Step 2: Extract number of targets (6th byte)
+    // Extract number of targets (6th byte)
     uint8_t nrOfTargets = buffer[5];
     if (nrOfTargets > MAX_TARGETS) {
         return ERR_COMMAND_MAX_DATA_OVERFLOW; // Too many targets
     }
 
-    // Step 3: Calculate expected frame length
+    // Calculate expected frame length
     uint16_t expectedLength = 6 + (14 * nrOfTargets) + 2;
     buffer.reserve(expectedLength);
 
-    // Step 4: Read until full frame is received
+    // Read until full frame is received
     while ((millis() - startTime) < timeout && buffer.size() < expectedLength) {
         if (_serial.available()) {
             buffer.push_back(_serial.read());
@@ -134,7 +134,7 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
         return ERR_COMMAND_NO_DATA_RECEIVED; // Incomplete frame
     }
 
-    // Step 5: Validate end delimiter (last byte must be 0x16)
+    // Validate end delimiter (last byte must be 0x16)
     if (buffer.back() != 0x16) {
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
@@ -152,8 +152,6 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
     iSYSResult_t res = decodeTargetFrame(buffer.data(),buffer.size(),4001, 32, pTargetList);
     return res;  // Return the result of decoding
 }
-
- 
 
 
 // Function to decode target frame data from radar sensor response
@@ -260,33 +258,7 @@ iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElem
                 targetList->targets[i].angle = static_cast<float>(tmp32) * 0.001f;
             }
         }
-        // else if (bitrate == 16) {
-        //     // 16-bit resolution mode - lower precision but faster processing
-        //     for (uint8_t i = 0; i < nrOfTargets; i++) {
-        //         // Decode signal strength (8-bit, no scaling)
-        //         targetList->targets[i].signal = static_cast<float>(pData[0] & 0xFF);
-        //         pData += 1;  // Move pointer to next data field
 
-        //         // Decode velocity (16-bit, scaled by 0.01 m/s)
-        //         int16_t tmp = (static_cast<int16_t>(pData[0]) << 8) | pData[1];
-        //         pData += 2;  // Move pointer to next data field
-        //         targetList->targets[i].velocity = static_cast<float>(tmp) * 0.01f;
-
-        //         // Decode range (16-bit, scaling depends on product code)
-        //         tmp = (static_cast<int16_t>(pData[0]) << 8) | pData[1];
-        //         pData += 2;  // Move pointer to next data field
-        //         if (productcode == 4004 || productcode == 6003) {
-        //             targetList->targets[i].range = static_cast<float>(tmp) * 0.001f;  // mm to meters
-        //         } else {
-        //             targetList->targets[i].range = static_cast<float>(tmp) * 0.01f;   // cm to meters
-        //         }
-
-        //         // Decode angle (16-bit, scaled by 0.01 degrees)
-        //         tmp = (static_cast<int16_t>(pData[0]) << 8) | pData[1];
-        //         pData += 2;  // Move pointer to next data field
-        //         targetList->targets[i].angle = static_cast<float>(tmp) * 0.01f;
-        //     }
-        //}
     } 
     else 
     {
@@ -337,6 +309,20 @@ iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElem
 
 iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
 {
+    // Input parameter validation
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+    
+    if (range > 150) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+    
+    if (timeout == 0) {
+        return ERR_TIMEOUT;
+    }
+    
+
     uint8_t command[13];
     uint8_t index = 0;
     uint16_t scaledRange = range * 10;
@@ -361,8 +347,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
     
     command[11] = fcs; // Checksum
     command[12] = 0x16;
-    
-    Serial.print("Send min range command: ");
+
     for (int i = 0; i < 13; i++) 
     {
         Serial.print("0x");
@@ -372,18 +357,18 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
     }
     Serial.println();
 
+
     
-    // Send command and read response
-    
-    _serial.write(command, 13);
+    // Send command and check if write was successful
+    size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
 
-    //Response Buffer
+    // Response Buffer
     uint8_t response[9];
     size_t minIndex = 0;
     uint32_t startTime = millis();
 
-
+    // Read response with timeout
     while ((millis() - startTime) < timeout && minIndex < sizeof(response)) {
         if (_serial.available()) {
             response[minIndex++] = _serial.read();
@@ -391,7 +376,8 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
             if (response[minIndex-1] == 0x16) break;
         }
     }
-    Serial.print("Received min range response: ");
+    
+
     for (int i = 0; i < minIndex; i++) 
     {
         Serial.print("0x");
@@ -400,7 +386,31 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
         Serial.print(" ");
     }
     Serial.println();
-    return (minIndex > 0) ? ERR_OK : ERR_COMMAND_NO_DATA_RECEIVED; 
+    
+    // Comprehensive response validation
+    if (minIndex == 0) {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    
+    if (minIndex < 9) {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+    
+    // Validate response frame structure
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 || 
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
+        response[6] != 0xD5 || response[8] != 0x16) {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    
+    // Validate checksum if present in response
+    if (minIndex >= 9) {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6); // Calculate expected FCS for DA..FC
+        if (response[7] != expectedFCS) {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+    return ERR_OK;
 }
 
 
@@ -409,6 +419,20 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
 
 iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
 {
+    // Input parameter validation
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+    
+    if (range > 150) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+    
+    if (timeout == 0) {
+        return ERR_TIMEOUT;
+    }
+    
+
     uint8_t command[13];
     uint8_t index = 0;
     uint16_t scaledRange = range * 10;
@@ -424,7 +448,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     command[index++] = 0x01; // SA
     command[index++] = 0xD5; // FC
     command[index++] = outputnumber; // PDU (output number)
-    command[index++] = 0x09; // Mode/flag for min range
+    command[index++] = 0x09; // Mode/flag for max range
     command[index++] = maxHighByte; // High byte of range
     command[index++] = maxLowByte; // Low byte of range
 
@@ -434,7 +458,6 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     command[index++] = fcs; // Checksum
     command[index++] = 0x16;
     
-    Serial.print("Send max range command: ");
     for (int i = 0; i < 13; i++) 
     {
         Serial.print("0x");
@@ -444,21 +467,24 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     }
     Serial.println();
 
-    // Send command and read response
     
-    _serial.write(command, 13);
+    // Send command and check if write was successful
+    size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
 
     uint8_t response[9];
     uint32_t startTime = millis();
     size_t maxIndex = 0;
+    
+    
+    // Read response with timeout
     while ((millis() - startTime) < timeout && maxIndex < 9) {
         if (_serial.available()) {
             response[maxIndex++] = _serial.read();
             if (response[maxIndex-1] == 0x16) break; // End delimiter
         }
     }
-    Serial.print("Received max range response: ");
+
     for (int i = 0; i < maxIndex; i++) 
     {
         Serial.print("0x");
@@ -467,7 +493,32 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
         Serial.print(" ");
     }
     Serial.println();
-    return (maxIndex > 0) ? ERR_OK : ERR_COMMAND_NO_DATA_RECEIVED; 
+    
+    // Comprehensive response validation
+    if (maxIndex == 0) {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    
+    if (maxIndex < 9) {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+    
+    // Validate response frame structure
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 || 
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
+        response[6] != 0xD5 || response[8] != 0x16) {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    
+    // Validate checksum if present in response
+    if (maxIndex >= 9) {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6); // Calculate expected FCS for DA..FC
+        if (response[7] != expectedFCS) {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+    
+    return ERR_OK;
 }
 
 
