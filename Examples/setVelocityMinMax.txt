@@ -9,8 +9,6 @@ iSYSTargetList_t targetList;
 // Configuration
 const uint8_t DESTINATION_ADDRESS = 0x81;  // Adjust per your device config
 const uint32_t TIMEOUT_MS = 300;          // Response timeout
-uint8_t SetminRangeValue = 0;
-uint8_t SetmaxRangeValue = 150;
 uint8_t SetminVelocityValue = 18;
 uint8_t SetmaxVelocityValue = 217;
 
@@ -39,18 +37,6 @@ void setup()
   delay(500);
 
 
- 
-  iSYSResult_t iSYS_setOutputRangeMin = radar.iSYS_setOutputRangeMin(ISYS_OUTPUT_1,SetminRangeValue, DESTINATION_ADDRESS, TIMEOUT_MS); 
-  if (iSYS_setOutputRangeMin != ERR_OK) {
-  Serial.print("iSYS_setOutputRangeMin failed: ");
-  Serial.println(iSYS_setOutputRangeMin, HEX);
-}
-
-  iSYSResult_t iSYS_setOutputRangeMax = radar.iSYS_setOutputRangeMax(ISYS_OUTPUT_1,SetmaxRangeValue, DESTINATION_ADDRESS, TIMEOUT_MS); 
-    if (iSYS_setOutputRangeMax != ERR_OK) {
-  Serial.print("iSYS_setOutputRangeMax failed: ");
-  Serial.println(iSYS_setOutputRangeMax, HEX);
-}
 
 
   iSYSResult_t iSYS_setOutputVelocityMin = radar.iSYS_setOutputVelocityMin(ISYS_OUTPUT_1,SetminVelocityValue, DESTINATION_ADDRESS, TIMEOUT_MS); 

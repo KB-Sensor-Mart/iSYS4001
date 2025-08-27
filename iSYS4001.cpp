@@ -534,7 +534,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber
         return ERR_PARAMETER_OUT_OF_RANGE;
     }
     
-    if (range > 150) {
+    if (range > 250) {
         return ERR_PARAMETER_OUT_OF_RANGE;
     }
     
@@ -545,7 +545,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber
 
     uint8_t command[13];
     uint8_t index = 0;
-    uint16_t scaledVelocity = (range/3.6) * 10;
+    uint16_t scaledVelocity = (uint16_t)round((range / 3.6f) * 10.0f);
     uint8_t minHighByte = (scaledVelocity >> 8) & 0xFF;
     uint8_t minLowByte = scaledVelocity & 0xFF;
 
@@ -655,7 +655,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber
 
     uint8_t command[13];
     uint8_t index = 0;
-    uint16_t scaledVelocity = (range/3.6) * 10;
+    uint16_t scaledVelocity = (uint16_t)round((range / 3.6f) * 10.0f);
     uint8_t maxHighByte = (scaledVelocity >> 8) & 0xFF;
     uint8_t maxLowByte = scaledVelocity & 0xFF;
 
