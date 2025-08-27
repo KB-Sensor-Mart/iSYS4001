@@ -521,6 +521,301 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     return ERR_OK;
 }
 
+/***************************************************************  
+ *  SET VELOCITY MIN/MAX FUNCTIONS 
+ ***************************************************************/
+
+//``````````````````````````````````````````````````````````` SET VELOCITY MIN FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
+{
+    // Input parameter validation
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+    
+    if (range > 150) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+    
+    if (timeout == 0) {
+        return ERR_TIMEOUT;
+    }
+    
+
+    uint8_t command[13];
+    uint8_t index = 0;
+    uint16_t scaledVelocity = (range/3.6) * 10;
+    uint8_t minHighByte = (scaledVelocity >> 8) & 0xFF;
+    uint8_t minLowByte = scaledVelocity & 0xFF;
+
+    // Build command frame
+    command[index++] = 0x68; // SD2
+    command[index++] = 0x07; // LE
+    command[index++] = 0x07; // LEr
+    command[index++] = 0x68; // SD2
+    command[index++] = destAddress; // DA
+    command[index++] = 0x01; // SA
+    command[index++] = 0xD5; // FC
+    command[index++] = outputnumber; // PDU (output number)
+    command[index++] = 0x0C; // Mode/flag for min range
+    command[index++] = minHighByte; // High byte of range
+    command[index++] = minLowByte; // Low byte of range
+
+    // Calculate checksum (sum of bytes 4 to 10)
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    
+    command[11] = fcs; // Checksum
+    command[12] = 0x16;
+
+    for (int i = 0; i < 13; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+
+    
+    // Send command and check if write was successful
+    size_t bytesWritten = _serial.write(command, 13);
+    _serial.flush();
+
+    // Response Buffer
+    uint8_t response[9];
+    size_t minIndex = 0;
+    uint32_t startTime = millis();
+
+    // Read response with timeout
+    while ((millis() - startTime) < timeout && minIndex < sizeof(response)) {
+        if (_serial.available()) {
+            response[minIndex++] = _serial.read();
+
+            if (response[minIndex-1] == 0x16) break;
+        }
+    }
+    
+
+    for (int i = 0; i < minIndex; i++) 
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10) Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Comprehensive response validation
+    if (minIndex == 0) {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    
+    if (minIndex < 9) {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+    
+    // Validate response frame structure
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 || 
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
+        response[6] != 0xD5 || response[8] != 0x16) {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    
+    // Validate checksum if present in response
+    if (minIndex >= 9) {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6); // Calculate expected FCS for DA..FC
+        if (response[7] != expectedFCS) {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+    return ERR_OK;
+}
+
+
+
+//``````````````````````````````````````````````````````````` SET VELOCITY MAX FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
+{
+    // Input parameter validation
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+    
+    if (range > 250) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+    
+    if (timeout == 0) {
+        return ERR_TIMEOUT;
+    }
+    
+
+    uint8_t command[13];
+    uint8_t index = 0;
+    uint16_t scaledVelocity = (range/3.6) * 10;
+    uint8_t maxHighByte = (scaledVelocity >> 8) & 0xFF;
+    uint8_t maxLowByte = scaledVelocity & 0xFF;
+
+    // Build command frame
+    command[index++] = 0x68; // SD2
+    command[index++] = 0x07; // LE
+    command[index++] = 0x07; // LEr
+    command[index++] = 0x68; // SD2
+    command[index++] = destAddress; // DA
+    command[index++] = 0x01; // SA
+    command[index++] = 0xD5; // FC
+    command[index++] = outputnumber; // PDU (output number)
+    command[index++] = 0x0D; // Mode/flag for max range
+    command[index++] = maxHighByte; // High byte of range
+    command[index++] = maxLowByte; // Low byte of range
+
+    // Calculate checksum (sum of bytes 4 to 10)
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    
+    command[index++] = fcs; // Checksum
+    command[index++] = 0x16;
+    
+    for (int i = 0; i < 13; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    
+    // Send command and check if write was successful
+    size_t bytesWritten = _serial.write(command, 13);
+    _serial.flush();
+
+    uint8_t response[9];
+    uint32_t startTime = millis();
+    size_t maxIndex = 0;
+    
+    
+    // Read response with timeout
+    while ((millis() - startTime) < timeout && maxIndex < 9) {
+        if (_serial.available()) {
+            response[maxIndex++] = _serial.read();
+            if (response[maxIndex-1] == 0x16) break; // End delimiter
+        }
+    }
+
+    for (int i = 0; i < maxIndex; i++) 
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10) Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Comprehensive response validation
+    if (maxIndex == 0) {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    
+    if (maxIndex < 9) {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+    
+    // Validate response frame structure
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 || 
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
+        response[6] != 0xD5 || response[8] != 0x16) {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    
+    // Validate checksum if present in response
+    if (maxIndex >= 9) {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6); // Calculate expected FCS for DA..FC
+        if (response[7] != expectedFCS) {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+    
+    return ERR_OK;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
