@@ -144,15 +144,20 @@ public:
     iSYSResult_t iSYS_setOutputRangeMax( iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);
 
 
-    /***************************************************************  
+/***************************************************************  
  *  SET VELOCITY MIN/MAX FUNCTIONS  
  ***************************************************************/
 
     iSYSResult_t iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout);
 
+/***************************************************************  
+ *  SET SIGNAL MIN/MAX FUNCTIONS  
+ ***************************************************************/
 
-    
+    iSYSResult_t iSYS_setOutputSignalMin(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout);
+
 /***************************************************************  
  *  EEPROM COMMAND FUNCTIONS 
  ***************************************************************/
