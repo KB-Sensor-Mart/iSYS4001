@@ -175,6 +175,13 @@ public:
     iSYSResult_t iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t destAddress , uint32_t timeout);
     iSYSResult_t iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t destAddress, uint32_t timeout);
 
+/***************************************************************  
+ *  ACQUISITION CONTROL FUNCTIONS 
+ ***************************************************************/
+
+    iSYSResult_t iSYS_startAcquisition(uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeout);
+
 private:
     uint32_t _baud;
     HardwareSerial& _serial;
@@ -196,6 +203,13 @@ private:
     iSYSResult_t sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunction, uint8_t destAddress);
     iSYSResult_t receiveEEPROMAcknowledgement(uint8_t destAddress,uint32_t timeout);
     uint8_t calculateFCS(const uint8_t* data, uint8_t startIndex, uint8_t endIndex);
+
+/***************************************************************  
+ *  ACQUISITION CONTROL HELPER FUNCTIONS
+ ***************************************************************/    
+
+    iSYSResult_t sendAcquisitionCommand(uint8_t destAddress, bool start);
+    iSYSResult_t receiveAcquisitionAcknowledgement(uint8_t destAddress, uint32_t timeout);
    
 };
 

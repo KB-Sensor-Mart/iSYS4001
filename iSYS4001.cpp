@@ -1346,3 +1346,185 @@ iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t des
 
     return ERR_COMMAND_NO_DATA_RECEIVED;
 }
+
+
+
+/***************************************************************  
+ *  ACQUISITION CONTROL FUNCTIONS  
+ ***************************************************************/
+
+// Main function to start data acquisition from the iSYS radar sensor
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::iSYS_startAcquisition(uint8_t destAddress, uint32_t timeout)
+{
+    // Send the start acquisition command to the radar sensor
+    iSYSResult_t res = sendAcquisitionCommand(destAddress, true);
+    if (res != ERR_OK) 
+    {
+        return res;  // If sending failed, return error immediately
+    }
+    
+    // Receive and verify the acknowledgement response from the radar sensor
+    res = receiveAcquisitionAcknowledgement(destAddress, timeout);
+    if (res != ERR_OK) 
+    {
+        return res;  // If receiving/verification failed, return error
+    }
+    
+    return ERR_OK;  // Success - acquisition started
+}
+
+// Main function to stop data acquisition from the iSYS radar sensor
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeout)
+{
+    // Send the stop acquisition command to the radar sensor
+    iSYSResult_t res = sendAcquisitionCommand(destAddress, false);
+    if (res != ERR_OK) 
+    {
+        return res;  // If sending failed, return error immediately
+    }
+    
+    // Receive and verify the acknowledgement response from the radar sensor
+    res = receiveAcquisitionAcknowledgement(destAddress, timeout);
+    if (res != ERR_OK) 
+    {
+        return res;  // If receiving/verification failed, return error
+    }
+    
+    return ERR_OK;  // Success - acquisition stopped
+}
+
+// Function to send acquisition start/stop command frame to the radar sensor
+// Parameters: destAddress - destination address for the radar sensor
+//             start - true to start acquisition, false to stop acquisition
+// Returns: iSYSResult_t - error code (always ERR_OK for this function)
+iSYSResult_t iSYS4001::sendAcquisitionCommand(uint8_t destAddress, bool start)
+{
+    // Based on the protocol from the documentation:
+    // Start acquisition: 68 05 05 68 80 01 D1 00 00 52 16
+    // Stop acquisition:  68 05 05 68 80 01 D1 00 01 53 16
+    // Frame structure: SD2 LE LEr SD2 DA SA FC PDU FCS ED
+    // SD2 = Start Delimiter 2 (0x68), LE = Length, LEr = Length repeat, DA = Destination Address, 
+    // SA = Source Address, FC = Function Code (0xD1), PDU = Protocol Data Unit (0x00 for start, 0x01 for stop), 
+    // FCS = Frame Check Sequence, ED = End Delimiter (0x16)
+    
+    uint8_t command[11];  // Array to hold the complete command frame
+    uint8_t index = 0;    // Index for building the command array
+    
+    // Build the command frame byte by byte according to iSYS protocol
+    command[index++] = 0x68;  // SD2
+    command[index++] = 0x05;  // LE
+    command[index++] = 0x05;  // LEr
+    command[index++] = 0x68;  // SD2
+    command[index++] = destAddress;  // DA
+    command[index++] = 0x01;  // SA
+    command[index++] = 0xD1;  // FC - Acquisition control function code
+    command[index++] = 0x00;  // PDU[0] - Sub-function high byte (always 0x00)
+    command[index++] = start ? 0x00 : 0x01;  // PDU[1] - Sub-function low byte (0x00 = start, 0x01 = stop)
+    
+    // Calculate FCS (Frame Check Sequence) - sum of bytes from DA to PDU
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[index++] = fcs;  // FCS - Frame Check Sequence for error detection
+    command[index++] = 0x16; // ED - End Delimiter
+    
+    // Debug: Print the command frame being sent to radar
+    Serial.print(start ? "Starting" : "Stopping");
+    Serial.print(" acquisition command to radar: ");
+    for (int i = 0; i < 11; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) 
+        {
+            Serial.print("0");  // Add leading zero for single digit hex
+        }
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Send the complete command frame over serial interface
+    _serial.write(command, 11);
+    _serial.flush();  // Ensure all data is transmitted before continuing
+    return ERR_OK;
+}
+
+// Function to receive and verify acquisition acknowledgement from radar sensor
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::receiveAcquisitionAcknowledgement(uint8_t destAddress, uint32_t timeout)
+{
+     if (timeout == 0) 
+    {
+        return ERR_TIMEOUT;
+    }
+
+
+    uint32_t startTime = millis();  // Record start time for timeout calculation
+    uint8_t buffer[9];            // Buffer to store incoming response data
+    uint16_t index = 0;             // Index for storing received bytes
+    uint8_t byte;
+    
+    // Wait for response with timeout protection
+    while ((millis() - startTime) < timeout) 
+    {
+        if (_serial.available()) 
+        {  // Check if data is available to read
+            byte = _serial.read();  // Read one byte from serial
+            buffer[index++] = byte;         // Store byte in buffer
+            
+            // Check for end delimiter (0x16) which indicates end of frame
+            if (byte == 0x16 && index >= 9) 
+            {
+               
+                for (int i = 0; i < index; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) 
+                    {
+                        Serial.print("0");  // Add leading zero for single digit hex
+                    }
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+                
+                // Verify the acknowledgement frame structure
+                // Expected: 68 03 03 68 01 destAddress D1 FCS 16
+                if (index == 9 && 
+                    buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
+                    buffer[6] == 0xD1 && buffer[8] == 0x16) 
+                {
+                    
+                    uint8_t expectedFCS = calculateFCS(buffer, 4, 6);
+                    if (buffer[7] == expectedFCS) 
+                    {
+                        return ERR_OK;  // Valid acknowledgement received
+                    }
+                    else 
+                    {
+                        return ERR_INVALID_CHECKSUM;  // Invalid checksum
+                    }
+                }
+                else 
+                {
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;  // Invalid frame structure
+                }
+            }
+            
+            // Prevent buffer overflow by checking array bounds
+            if (index > 9) 
+            {
+                return ERR_COMMAND_MAX_DATA_OVERFLOW;  // Buffer overflow error
+            }
+        }
+    }
+    
+    return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
+}
