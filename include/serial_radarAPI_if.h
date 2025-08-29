@@ -346,9 +346,22 @@ ISYS_API_EXPORT iSYSResult_t iSYS_setOutputSignalMax(iSYSHandle_t pHandle, iSYSO
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputVelocityMin(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout);
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputVelocityMax(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout);
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputDirection(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, iSYSDirection_type_t direction, uint8_t destAddress, uint32_t timeout);
+
+
+
+
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputFilter(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress, uint32_t timeout);
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputSignalFilter(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout);
+
+
+
+
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputAlphaFilterVelocity(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, uint16_t filter, uint8_t destAddress, uint32_t timeout);
+
+
+
+
+
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputAlphaFilterRange(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, uint16_t filter, uint8_t destAddress, uint32_t timeout);
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputRangeMinExt(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);   /*iSYS-6203 only*/
 ISYS_API_EXPORT iSYSResult_t iSYS_setOutputRangeMaxExt(iSYSHandle_t pHandle, iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);   /*iSYS-6203 only*/

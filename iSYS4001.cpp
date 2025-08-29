@@ -1528,3 +1528,637 @@ iSYSResult_t iSYS4001::receiveAcquisitionAcknowledgement(uint8_t destAddress, ui
     
     return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
 }
+
+
+
+
+
+
+
+/***************************************************************  
+ *  OUTPUT SINGLE TARGET FILTER FUNCTIONS  
+ ***************************************************************/
+
+// Function to set the single target filter type for a selected output
+// Parameters: outputnumber - specifies which output to use (1, 2, or 3)
+//             filterType - the filter type to set (highest amplitude, mean, median, min, max)
+//             destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::iSYS_setOutputFilter(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress, uint32_t timeout)
+{
+    // Send the set output filter command to the radar sensor
+    iSYSResult_t res = sendSetOutputFilterRequest(outputnumber, filter, destAddress);
+    if (res != ERR_OK) 
+    {
+        return res;  // If sending failed, return error immediately
+    }
+    
+    // Receive and verify the acknowledgement from the radar sensor
+    res = receiveSetOutputFilterAcknowledgement(destAddress, timeout);
+    if (res != ERR_OK) 
+    {
+        return res;  // If receiving/verification failed, return error
+    }
+    
+    return ERR_OK;  // Success - filter type has been set
+}
+
+// Function to send set output filter request command to the radar sensor
+// Parameters: outputnumber - specifies which output to use
+//             filterType - the filter type to set
+//             destAddress - destination address for the radar sensor
+// Returns: iSYSResult_t - error code (always ERR_OK for this function)
+iSYSResult_t iSYS4001::sendSetOutputFilterRequest(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress)
+{
+    // Based on the protocol: 68 07 07 68 80 01 D5 01 15 00 03 6F 16
+    // Frame structure: SD2 LE LEr SD2 DA SA FC PDU1 PDU2 PDU3 PDU4 FCS ED
+    // SD2 = Start Delimiter 2 (0x68), LE = Length, LEr = Length repeat, DA = Destination Address, 
+    // SA = Source Address, FC = Function Code (0xD5 = write), PDU = Protocol Data Unit, FCS = Frame Check Sequence, ED = End Delimiter
+    
+    uint8_t command[13];  // Array to hold the complete command frame
+    uint8_t index = 0;    // Index for building the command array
+    
+    // Build the command frame byte by byte according to iSYS protocol
+    command[index++] = 0x68;  // SD2
+    command[index++] = 0x07;  // LE
+    command[index++] = 0x07;  // LEr
+    command[index++] = 0x68;  // SD2
+    command[index++] = destAddress;  // DA
+    command[index++] = 0x01;  // SA
+    command[index++] = 0xD5;  // FC - Write function code
+    command[index++] = outputnumber;  // PDU1 - Output number
+    command[index++] = 0x15;  // PDU2 - Sub-function code for output filter type
+    command[index++] = 0x00;  // PDU3 - Filter type high byte
+    command[index++] = (uint8_t)filter;  // PDU4 - Filter type low byte
+    
+    // Calculate FCS (Frame Check Sequence) - sum of bytes from DA to PDU4
+    uint8_t fcs = calculateFCS(command, 4, index-1);
+    command[index++] = fcs;  // FCS - Frame Check Sequence for error detection
+    command[index++] = 0x16; // ED - End Delimiter
+    
+    // Debug: Print the command frame being sent to radar
+    Serial.print("Setting output filter type command to radar: ");
+    for (int i = 0; i < 13; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) 
+        {
+            Serial.print("0");  // Add leading zero for single digit hex
+        }
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Send the complete command frame over serial interface
+    _serial.write(command, 13);
+    _serial.flush();  // Ensure all data is transmitted before continuing
+    return ERR_OK;
+}
+
+// Function to receive and verify set output filter acknowledgement from radar sensor
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::receiveSetOutputFilterAcknowledgement(uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0) 
+    {
+        return ERR_TIMEOUT;
+    }
+
+    uint32_t startTime = millis();  // Record start time for timeout calculation
+    uint8_t buffer[9];            // Buffer to store incoming response data
+    uint16_t index = 0;             // Index for storing received bytes
+    uint8_t byte;
+    
+    // Wait for response with timeout protection
+    while ((millis() - startTime) < timeout) 
+    {
+        if (_serial.available()) 
+        {  // Check if data is available to read
+            byte = _serial.read();  // Read one byte from serial
+            buffer[index++] = byte;         // Store byte in buffer
+            
+            // Check for end delimiter (0x16) which indicates end of frame
+            if (byte == 0x16 && index >= 9) 
+            {
+                // Debug: Print the received acknowledgement frame
+                Serial.print("Received output filter acknowledgement: ");
+                for (int i = 0; i < index; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) 
+                    {
+                        Serial.print("0");  // Add leading zero for single digit hex
+                    }
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+                
+                // Verify the acknowledgement frame structure
+                // Expected: 68 03 03 68 01 destAddress D5 FCS 16
+                if (index == 9 && 
+                    buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
+                    buffer[6] == 0xD5 && buffer[8] == 0x16) 
+                {
+                    uint8_t expectedFCS = calculateFCS(buffer, 4, 6);
+                    if (buffer[7] == expectedFCS) 
+                    {
+                        return ERR_OK;  // Valid acknowledgement received
+                    }
+                    else 
+                    {
+                        return ERR_INVALID_CHECKSUM;  // Invalid checksum
+                    }
+                }
+                else 
+                {
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;  // Invalid frame structure
+                }
+            }
+            
+            // Prevent buffer overflow by checking array bounds
+            if (index > 9) 
+            {
+                return ERR_COMMAND_MAX_DATA_OVERFLOW;  // Buffer overflow error
+            }
+        }
+    }
+    
+    return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
+}
+
+// Function to get the single target filter type from a selected output
+// Parameters: outputnumber - specifies which output to use (1, 2, or 3)
+//             filterType - pointer to store the retrieved filter type
+//             destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::iSYS_getOutputFilter(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout)
+{
+    // Check for null pointer
+    if (filter == nullptr) 
+    {
+        return ERR_NULL_POINTER;
+    }
+    
+    // Send the get output filter command to the radar sensor
+    iSYSResult_t res = sendGetOutputFilterRequest(outputnumber, destAddress);
+    if (res != ERR_OK) 
+    {
+        return res;  // If sending failed, return error immediately
+    }
+    
+    // Receive and decode the response from the radar sensor
+    res = receiveGetOutputFilterResponse(filter, destAddress, timeout);
+    if (res != ERR_OK) 
+    {
+        return res;  // If receiving/decoding failed, return error
+    }
+    
+    return ERR_OK;  // Success - filter type has been retrieved
+}
+
+// Function to send get output filter request command to the radar sensor
+// Parameters: outputnumber - specifies which output to use
+//             destAddress - destination address for the radar sensor
+// Returns: iSYSResult_t - error code (always ERR_OK for this function)
+iSYSResult_t iSYS4001::sendGetOutputFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
+{
+    // Based on the protocol: 68 05 05 68 80 01 D4 01 15 6B 16
+    // Frame structure: SD2 LE LEr SD2 DA SA FC PDU1 PDU2 FCS ED
+    // SD2 = Start Delimiter 2 (0x68), LE = Length, LEr = Length repeat, DA = Destination Address, 
+    // SA = Source Address, FC = Function Code (0xD4 = read), PDU = Protocol Data Unit, FCS = Frame Check Sequence, ED = End Delimiter
+    
+    uint8_t command[11];  // Array to hold the complete command frame
+    uint8_t index = 0;    // Index for building the command array
+    
+    // Build the command frame byte by byte according to iSYS protocol
+    command[index++] = 0x68;  // SD2
+    command[index++] = 0x05;  // LE
+    command[index++] = 0x05;  // LEr
+    command[index++] = 0x68;  // SD2
+    command[index++] = destAddress;  // DA
+    command[index++] = 0x01;  // SA
+    command[index++] = 0xD4;  // FC - Read function code
+    command[index++] = outputnumber;  // PDU1 - Output number
+    command[index++] = 0x15;  // PDU2 - Sub-function code for output filter type
+    
+    // Calculate FCS (Frame Check Sequence) - sum of bytes from DA to PDU2
+    uint8_t fcs = calculateFCS(command, 4, index-1);
+    command[index++] = fcs;  // FCS - Frame Check Sequence for error detection
+    command[index++] = 0x16; // ED - End Delimiter
+    
+    // Debug: Print the command frame being sent to radar
+    Serial.print("Getting output filter type command to radar: ");
+    for (int i = 0; i < 11; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) 
+        {
+            Serial.print("0");  // Add leading zero for single digit hex
+        }
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Send the complete command frame over serial interface
+    _serial.write(command, 11);
+    _serial.flush();  // Ensure all data is transmitted before continuing
+    return ERR_OK;
+}
+
+// Function to receive and decode get output filter response from radar sensor
+// Parameters: filterType - pointer to store the retrieved filter type
+//             destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::receiveGetOutputFilterResponse(iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0) 
+    {
+        return ERR_TIMEOUT;
+    }
+
+    uint32_t startTime = millis();  // Record start time for timeout calculation
+    uint8_t buffer[11];           // Buffer to store incoming response data
+    uint16_t index = 0;             // Index for storing received bytes
+    uint8_t byte;
+    
+    // Wait for response with timeout protection
+    while ((millis() - startTime) < timeout) 
+    {
+        if (_serial.available()) 
+        {  // Check if data is available to read
+            byte = _serial.read();  // Read one byte from serial
+            buffer[index++] = byte;         // Store byte in buffer
+            
+            // Check for end delimiter (0x16) which indicates end of frame
+            if (byte == 0x16 && index >= 11) 
+            {
+                // Debug: Print the received response frame
+                Serial.print("Received output filter response: ");
+                for (int i = 0; i < index; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) 
+                    {
+                        Serial.print("0");  // Add leading zero for single digit hex
+                    }
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+                
+                // Verify the response frame structure
+                // Expected: 68 05 05 68 01 destAddress D4 00 filterType FCS 16
+                if (index == 11 && 
+                    buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
+                    buffer[6] == 0xD4 && buffer[7] == 0x00 && buffer[10] == 0x16) 
+                {
+                    uint8_t expectedFCS = calculateFCS(buffer, 4, 8);
+                    if (buffer[9] == expectedFCS) 
+                    {
+                        // Extract the filter type from the response
+                        *filter = (iSYSOutput_filter_t)buffer[8];
+                        return ERR_OK;  // Valid response received and decoded
+                    }
+                    else 
+                    {
+                        return ERR_INVALID_CHECKSUM;  // Invalid checksum
+                    }
+                }
+                else 
+                {
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;  // Invalid frame structure
+                }
+            }
+            
+            // Prevent buffer overflow by checking array bounds
+            if (index > 11) 
+            {
+                return ERR_COMMAND_MAX_DATA_OVERFLOW;  // Buffer overflow error
+            }
+        }
+    }
+    
+    return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
+}
+
+// Function to set the single target filter signal for a selected output
+// Parameters: outputnumber - specifies which output to use (1, 2, or 3)
+//             filterSignal - the filter signal to set (off, velocity radial, range radial)
+//             destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout)
+{
+    // Send the set output signal filter command to the radar sensor
+    iSYSResult_t res = sendSetOutputSignalFilterRequest(outputnumber, signal, destAddress);
+    if (res != ERR_OK) 
+    {
+        return res;  // If sending failed, return error immediately
+    }
+    
+    // Receive and verify the acknowledgement from the radar sensor
+    res = receiveSetOutputSignalFilterAcknowledgement(destAddress, timeout);
+    if (res != ERR_OK) 
+    {
+        return res;  // If receiving/verification failed, return error
+    }
+    
+    return ERR_OK;  // Success - filter signal has been set
+}
+
+// Function to send set output signal filter request command to the radar sensor
+// Parameters: outputnumber - specifies which output to use
+//             filterSignal - the filter signal to set
+//             destAddress - destination address for the radar sensor
+// Returns: iSYSResult_t - error code (always ERR_OK for this function)
+iSYSResult_t iSYS4001::sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress)
+{
+    // Based on the protocol: 68 07 07 68 80 01 D5 01 16 00 02 6F 16
+    // Frame structure: SD2 LE LEr SD2 DA SA FC PDU1 PDU2 PDU3 PDU4 FCS ED
+    // SD2 = Start Delimiter 2 (0x68), LE = Length, LEr = Length repeat, DA = Destination Address, 
+    // SA = Source Address, FC = Function Code (0xD5 = write), PDU = Protocol Data Unit, FCS = Frame Check Sequence, ED = End Delimiter
+    
+    uint8_t command[13];  // Array to hold the complete command frame
+    uint8_t index = 0;    // Index for building the command array
+    
+    // Build the command frame byte by byte according to iSYS protocol
+    command[index++] = 0x68;  // SD2
+    command[index++] = 0x07;  // LE
+    command[index++] = 0x07;  // LEr
+    command[index++] = 0x68;  // SD2
+    command[index++] = destAddress;  // DA
+    command[index++] = 0x01;  // SA
+    command[index++] = 0xD5;  // FC - Write function code
+    command[index++] = outputnumber;  // PDU1 - Output number
+    command[index++] = 0x16;  // PDU2 - Sub-function code for output signal filter
+    command[index++] = 0x00;  // PDU3 - Filter signal high byte
+    command[index++] = (uint8_t)signal;  // PDU4 - Filter signal low byte
+    
+    // Calculate FCS (Frame Check Sequence) - sum of bytes from DA to PDU4
+    uint8_t fcs = calculateFCS(command, 4, index-1);
+    command[index++] = fcs;  // FCS - Frame Check Sequence for error detection
+    command[index++] = 0x16; // ED - End Delimiter
+    
+    // Debug: Print the command frame being sent to radar
+    Serial.print("Setting output signal filter command to radar: ");
+    for (int i = 0; i < 13; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) 
+        {
+            Serial.print("0");  // Add leading zero for single digit hex
+        }
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Send the complete command frame over serial interface
+    _serial.write(command, 13);
+    _serial.flush();  // Ensure all data is transmitted before continuing
+    return ERR_OK;
+}
+
+// Function to receive and verify set output signal filter acknowledgement from radar sensor
+// Parameters: destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::receiveSetOutputSignalFilterAcknowledgement(uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0) 
+    {
+        return ERR_TIMEOUT;
+    }
+
+    uint32_t startTime = millis();  // Record start time for timeout calculation
+    uint8_t buffer[9];            // Buffer to store incoming response data
+    uint16_t index = 0;             // Index for storing received bytes
+    uint8_t byte;
+    
+    // Wait for response with timeout protection
+    while ((millis() - startTime) < timeout) 
+    {
+        if (_serial.available()) 
+        {  // Check if data is available to read
+            byte = _serial.read();  // Read one byte from serial
+            buffer[index++] = byte;         // Store byte in buffer
+            
+            // Check for end delimiter (0x16) which indicates end of frame
+            if (byte == 0x16 && index >= 9) 
+            {
+                // Debug: Print the received acknowledgement frame
+                Serial.print("Received output signal filter acknowledgement: ");
+                for (int i = 0; i < index; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) 
+                    {
+                        Serial.print("0");  // Add leading zero for single digit hex
+                    }
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+                
+                // Verify the acknowledgement frame structure
+                // Expected: 68 03 03 68 01 destAddress D5 FCS 16
+                if (index == 9 && 
+                    buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
+                    buffer[6] == 0xD5 && buffer[8] == 0x16) 
+                {
+                    uint8_t expectedFCS = calculateFCS(buffer, 4, 6);
+                    if (buffer[7] == expectedFCS) 
+                    {
+                        return ERR_OK;  // Valid acknowledgement received
+                    }
+                    else 
+                    {
+                        return ERR_INVALID_CHECKSUM;  // Invalid checksum
+                    }
+                }
+                else 
+                {
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;  // Invalid frame structure
+                }
+            }
+            
+            // Prevent buffer overflow by checking array bounds
+            if (index > 9) 
+            {
+                return ERR_COMMAND_MAX_DATA_OVERFLOW;  // Buffer overflow error
+            }
+        }
+    }
+    
+    return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
+}
+
+// Function to get the single target filter signal from a selected output
+// Parameters: outputnumber - specifies which output to use (1, 2, or 3)
+//             filterSignal - pointer to store the retrieved filter signal
+//             destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout)
+{
+    // Check for null pointer
+    if (signal == nullptr) 
+    {
+        return ERR_NULL_POINTER;
+    }
+    
+    // Send the get output signal filter command to the radar sensor
+    iSYSResult_t res = sendGetOutputSignalFilterRequest(outputnumber, destAddress);
+    if (res != ERR_OK) 
+    {
+        return res;  // If sending failed, return error immediately
+    }
+    
+    // Receive and decode the response from the radar sensor
+    res = receiveGetOutputSignalFilterResponse(signal, destAddress, timeout);
+    if (res != ERR_OK) 
+    {
+        return res;  // If receiving/decoding failed, return error
+    }
+    
+    return ERR_OK;  // Success - filter signal has been retrieved
+}
+
+// Function to send get output signal filter request command to the radar sensor
+// Parameters: outputnumber - specifies which output to use
+//             destAddress - destination address for the radar sensor
+// Returns: iSYSResult_t - error code (always ERR_OK for this function)
+iSYSResult_t iSYS4001::sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
+{
+    // Based on the protocol: 68 05 05 68 80 01 D4 01 16 6C 16
+    // Frame structure: SD2 LE LEr SD2 DA SA FC PDU1 PDU2 FCS ED
+    // SD2 = Start Delimiter 2 (0x68), LE = Length, LEr = Length repeat, DA = Destination Address, 
+    // SA = Source Address, FC = Function Code (0xD4 = read), PDU = Protocol Data Unit, FCS = Frame Check Sequence, ED = End Delimiter
+    
+    uint8_t command[11];  // Array to hold the complete command frame
+    uint8_t index = 0;    // Index for building the command array
+    
+    // Build the command frame byte by byte according to iSYS protocol
+    command[index++] = 0x68;  // SD2
+    command[index++] = 0x05;  // LE
+    command[index++] = 0x05;  // LEr
+    command[index++] = 0x68;  // SD2
+    command[index++] = destAddress;  // DA
+    command[index++] = 0x01;  // SA
+    command[index++] = 0xD4;  // FC - Read function code
+    command[index++] = outputnumber;  // PDU1 - Output number
+    command[index++] = 0x16;  // PDU2 - Sub-function code for output signal filter
+    
+    // Calculate FCS (Frame Check Sequence) - sum of bytes from DA to PDU2
+    uint8_t fcs = calculateFCS(command, 4, index-1);
+    command[index++] = fcs;  // FCS - Frame Check Sequence for error detection
+    command[index++] = 0x16; // ED - End Delimiter
+    
+    // Debug: Print the command frame being sent to radar
+    Serial.print("Getting output signal filter command to radar: ");
+    for (int i = 0; i < 11; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) 
+        {
+            Serial.print("0");  // Add leading zero for single digit hex
+        }
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Send the complete command frame over serial interface
+    _serial.write(command, 11);
+    _serial.flush();  // Ensure all data is transmitted before continuing
+    return ERR_OK;
+}
+
+// Function to receive and decode get output signal filter response from radar sensor
+// Parameters: filterSignal - pointer to store the retrieved filter signal
+//             destAddress - destination address for the radar sensor
+//             timeout - maximum time to wait for response in milliseconds
+// Returns: iSYSResult_t - error code indicating success or failure
+iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0) 
+    {
+        return ERR_TIMEOUT;
+    }
+
+    uint32_t startTime = millis();  // Record start time for timeout calculation
+    uint8_t buffer[11];           // Buffer to store incoming response data
+    uint16_t index = 0;             // Index for storing received bytes
+    uint8_t byte;
+    
+    // Wait for response with timeout protection
+    while ((millis() - startTime) < timeout) 
+    {
+        if (_serial.available()) 
+        {  // Check if data is available to read
+            byte = _serial.read();  // Read one byte from serial
+            buffer[index++] = byte;         // Store byte in buffer
+            
+            // Check for end delimiter (0x16) which indicates end of frame
+            if (byte == 0x16 && index >= 11) 
+            {
+                // Debug: Print the received response frame
+                Serial.print("Received output signal filter response: ");
+                for (int i = 0; i < index; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) 
+                    {
+                        Serial.print("0");  // Add leading zero for single digit hex
+                    }
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+                
+                // Verify the response frame structure
+                // Expected: 68 05 05 68 01 destAddress D4 00 filterSignal FCS 16
+                if (index == 11 && 
+                    buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
+                    buffer[6] == 0xD4 && buffer[7] == 0x00 && buffer[10] == 0x16) 
+                {
+                    uint8_t expectedFCS = calculateFCS(buffer, 4, 8);
+                    if (buffer[9] == expectedFCS) 
+                    {
+                        // Extract the filter signal from the response
+                        *signal = (iSYSFilter_signal_t)buffer[8];
+                        return ERR_OK;  // Valid response received and decoded
+                    }
+                    else 
+                    {
+                        return ERR_INVALID_CHECKSUM;  // Invalid checksum
+                    }
+                }
+                else 
+                {
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;  // Invalid frame structure
+                }
+            }
+            
+            // Prevent buffer overflow by checking array bounds
+            if (index > 11) 
+            {
+                return ERR_COMMAND_MAX_DATA_OVERFLOW;  // Buffer overflow error
+            }
+        }
+    }
+    
+    return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
+}

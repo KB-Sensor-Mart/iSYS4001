@@ -92,6 +92,24 @@ typedef enum iSYSOutputNumber
     ISYS_OUTPUT_3
 } iSYSOutputNumber_t;
 
+// Output single target filter type (sub-function 0x15)
+typedef enum iSYSOutput_filter
+{
+    ISYS_SIGNAL = 0,
+    ISYS_MEAN           ,
+    ISYS_MEDIAN         ,
+    ISYS_MIN            ,
+    ISYS_MAX            
+} iSYSOutput_filter_t;
+
+// Output single target filter signal (sub-function 0x16)
+typedef enum iSYSFilter_signal
+{
+    ISYS_OFF = 0,
+    ISYS_VELOCITY_RADIAL,
+    ISYS_RANGE_RADIAL
+} iSYSFilter_signal_t;
+
 // EEPROM sub-function codes for saving settings
 typedef enum iSYSEEPROMSubFunction
 {
@@ -182,6 +200,15 @@ public:
     iSYSResult_t iSYS_startAcquisition(uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeout);
 
+/***************************************************************  
+ *  OUTPUT SINGLE TARGET FILTER FUNCTIONS  
+ ***************************************************************/
+
+    iSYSResult_t iSYS_setOutputFilter(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputFilter(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
+
 private:
     uint32_t _baud;
     HardwareSerial& _serial;
@@ -210,6 +237,19 @@ private:
 
     iSYSResult_t sendAcquisitionCommand(uint8_t destAddress, bool start);
     iSYSResult_t receiveAcquisitionAcknowledgement(uint8_t destAddress, uint32_t timeout);
+
+/***************************************************************  
+ *  OUTPUT SINGLE TARGET FILTER HELPER FUNCTIONS
+ ***************************************************************/    
+
+    iSYSResult_t sendSetOutputFilterRequest(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress);
+    iSYSResult_t receiveSetOutputFilterAcknowledgement(uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t sendGetOutputFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
+    iSYSResult_t receiveGetOutputFilterResponse(iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress);
+    iSYSResult_t receiveSetOutputSignalFilterAcknowledgement(uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
+    iSYSResult_t receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
    
 };
 
