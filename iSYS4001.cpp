@@ -1053,7 +1053,85 @@ iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, 
     return ERR_OK;
 }
 
+iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t *direction, uint8_t destAddress, uint32_t timeout)
 
+{
+    if (direction == NULL) return ERR_NULL_POINTER;
+
+    // Request frame example:
+    // 68 05 05 68 DA 01 D4 outputnumber 0E FCS 16
+    uint8_t command[11];
+    uint8_t index = 0;
+    command[index++] = 0x68;   
+    command[index++] = 0x05;
+    command[index++] = 0x05;
+    command[index++] = 0x68;
+    command[index++] = destAddress;
+    command[index++] = 0x01;
+    command[index++] = 0xD4;
+    command[index++] = outputnumber;
+    command[index++] = 0x0E;
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[index++] = fcs;
+    command[index++] = 0x16;
+
+    // Debug: print outbound frame
+    Serial.print("Sending GET Direction command: ");
+    for (int i = 0; i < (int)sizeof(command); i++)
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    _serial.write(command, sizeof(command));
+    _serial.flush();
+
+    // Expected response example:
+    // 68 05 05 68 01 <ADDR> D4 00 outputnumber FCS 16
+    uint32_t startTime = millis();
+    uint8_t buffer[11];
+    uint8_t count = 0;
+    while ((millis() - startTime) < timeout)
+    {
+        if (_serial.available())
+        {
+            uint8_t b = _serial.read();
+            if (count < sizeof(buffer)) buffer[count++] = b; else return ERR_COMMAND_MAX_DATA_OVERFLOW;
+            if (b == 0x16 && count >= 11)
+            {
+                // Optional: print frame
+                Serial.print("Received GET Direction response: ");
+                for (uint8_t i = 0; i < count; i++)
+                {
+                    Serial.print("0x");
+                    if (buffer[i] < 0x10) Serial.print("0");
+                    Serial.print(buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+
+                if (count == 11 && buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
+                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
+                    buffer[6] == 0xD4 && buffer[7] == 0x00 && buffer[10] == 0x16)
+                {
+                    uint8_t calc = calculateFCS(buffer, 4, 8); // DA..PDU
+                    if (calc == buffer[9])
+                    {
+                        *direction = (iSYSDirection_type_t)buffer[8];
+                        return ERR_OK;
+                    }
+                    return ERR_COMMAND_RX_FRAME_DAMAGED;
+                }
+                return ERR_COMMAND_RX_FRAME_DAMAGED;
+            }
+        }
+    }
+
+    return ERR_COMMAND_NO_DATA_RECEIVED;
+}
 
 
 
