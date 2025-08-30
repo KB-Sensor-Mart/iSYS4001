@@ -950,6 +950,139 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, 
 
 
 
+/***************************************************************  
+ *  SET VELOCITY DIRECTION FUNCTION 
+ ***************************************************************/
+
+iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t direction, uint8_t destAddress, uint32_t timeout)
+{
+    // Input parameter validation
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+
+    
+    if (timeout == 0) {
+        return ERR_TIMEOUT;
+    }
+    
+
+    uint8_t command[13];
+    uint8_t index = 0;
+
+
+    // Build command frame
+    command[index++] = 0x68; // SD2
+    command[index++] = 0x07; // LE
+    command[index++] = 0x07; // LEr
+    command[index++] = 0x68; // SD2
+    command[index++] = destAddress; // DA
+    command[index++] = 0x01; // SA
+    command[index++] = 0xD5; // FC
+    command[index++] = outputnumber; // PDU (output number)
+    command[index++] = 0x0E; // Mode/flag for max range
+    command[index++] = 0X00; // High byte of range
+    command[index++] = (uint8_t)direction; // Low byte of range
+
+    // Calculate checksum (sum of bytes 4 to 10)
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    
+    command[index++] = fcs; // Checksum
+    command[index++] = 0x16;
+    
+    for (int i = 0; i < 13; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    
+    // Send command and check if write was successful
+    size_t bytesWritten = _serial.write(command, 13);
+    _serial.flush();
+
+    uint8_t response[9];
+    uint32_t startTime = millis();
+    size_t maxIndex = 0;
+    
+    
+    // Read response with timeout
+    while ((millis() - startTime) < timeout && maxIndex < 9) {
+        if (_serial.available()) {
+            response[maxIndex++] = _serial.read();
+            if (response[maxIndex-1] == 0x16) break; // End delimiter
+        }
+    }
+
+    for (int i = 0; i < maxIndex; i++) 
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10) Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Comprehensive response validation
+    if (maxIndex == 0) {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    
+    if (maxIndex < 9) {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+    
+    // Validate response frame structure
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 || 
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
+        response[6] != 0xD5 || response[8] != 0x16) {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    
+    // Validate checksum if present in response
+    if (maxIndex >= 9) {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6); // Calculate expected FCS for DA..FC
+        if (response[7] != expectedFCS) {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+    
+    return ERR_OK;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1128,7 +1261,8 @@ iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress,uint32_t
                 if (index == 9 && 
                     buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
                     buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
-                    buffer[6] == 0xDF && buffer[7] == 0x60 && buffer[8] == 0x16) 
+                    buffer[6] == 0xDF && buffer[8] == 0x16) 
+                    //&& buffer[7] == 0x60
                 {
                     return ERR_OK;  // Valid acknowledgement received
                 }

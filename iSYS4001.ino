@@ -18,81 +18,84 @@ void setup()
   // Initialize Serial2 explicitly with pins on ESP32
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
 
-
-
   // Flush any stale bytes from radar UART
-  while (Serial2.available()) 
-  { 
-    Serial2.read(); 
+  Serial2.flush();
+  
+  Serial.println("iSYS4001 Radar Sensor Initialized");
+  
+  // Configure output direction for OUTPUT 1
+  // Set to detect both approaching and receding targets
+  // iSYSResult_t result = radar.iSYS_setOutputDirection(ISYS_OUTPUT_1, ISYS_TARGET_DIRECTION_BOTH, deviceAddress, timeout);
+  
+  // if (result == ERR_OK) {
+  //   Serial.println("Output direction set successfully to BOTH directions");
+  // } else {
+  //   Serial.print("Failed to set output direction. Error code: ");
+  //   Serial.println(result);
+  // }
+  
+  // You can also set different directions for different outputs
+  // // For OUTPUT 2: only approaching targets
+  // iSYSResult_t result = radar.iSYS_setOutputDirection(ISYS_OUTPUT_2, ISYS_TARGET_DIRECTION_APPROACHING, deviceAddress, timeout);
+  // if (result == ERR_OK) {
+  //   Serial.println("OUTPUT 2 direction set to APPROACHING only");
+  // }
+  
+  // For OUTPUT 3: only receding targets  
+  iSYSResult_t result = radar.iSYS_setOutputDirection(ISYS_OUTPUT_1, ISYS_TARGET_DIRECTION_BOTH, deviceAddress, timeout);
+  if (result == ERR_OK) {
+    Serial.println("OUTPUT 1 direction set to RECEDING only");
   }
-
-  delay(500);
-
-	iSYSResult_t res;
-
-	// Set single target filter type to MIN on Output 1
-	res = radar.iSYS_setOutputFilter(ISYS_OUTPUT_1, ISYS_MAX, deviceAddress, timeout);
-    if (res != ERR_OK) {
-         Serial.print("iSYS_setOutputFilter failed: ");
-  Serial.println(res, HEX);
-    }
-
-	// Set single target filter signal to RANGE_RADIAL on Output 1
-	res = radar.iSYS_setOutputSignalFilter(ISYS_OUTPUT_1, ISYS_VELOCITY_RADIAL, deviceAddress, timeout);
-    if (res != ERR_OK) {
-         Serial.print("iSYS_setOutputSignalFilter failed: ");
-  Serial.println(res, HEX);
-    }
+  
+  // // Start acquisition
+  // iSYSResult_t result = radar.iSYS_startAcquisition(deviceAddress, timeout);
+  // if (result == ERR_OK) {
+  //   Serial.println("Radar acquisition started");
+  // } else {
+  //   Serial.println("Failed to start acquisition");
+  // }
 
 
-
-
-
-  iSYSResult_t saveAllSettings = radar.saveAllSettings(deviceAddress,timeout);
-
-
-}
-
-void loop() {
-  Serial.println("\n--- Requesting Target List ---");
-
-
-  while (Serial2.available()) { Serial2.read(); }
-
-
-  iSYSResult_t res = radar.getTargetList32(
-    &targetList,
-    deviceAddress,
-    timeout
-  );
-
-  if (res != ERR_OK) {
-    Serial.print("First attempt failed (code "); Serial.print(res); Serial.println(") - retrying once...");
-    res = radar.getTargetList32(&targetList, deviceAddress, timeout);
-  }
-
-  if (res == ERR_OK) {
-    if (targetList.error.iSYSTargetListError == TARGET_LIST_OK) {
-      Serial.print("Targets: ");
-      Serial.print(targetList.nrOfTargets);
-      Serial.print(", Output: ");
-      Serial.println(targetList.outputNumber);
-
-      for (uint16_t i = 0; i < targetList.nrOfTargets && i < MAX_TARGETS; i++) {
-        Serial.print("#"); Serial.print(i + 1); Serial.println("");
-        Serial.print("  Signal: "); Serial.println(targetList.targets[i].signal);
-        Serial.print("  Velocity: "); Serial.print(targetList.targets[i].velocity); Serial.println(" m/s");
-        Serial.print("  Range: "); Serial.print(targetList.targets[i].range); Serial.println(" m");
-        Serial.print("  Angle: "); Serial.print(targetList.targets[i].angle); Serial.println(" deg");
-      }
-    } else {
-      Serial.print("Target list error code: ");
-      Serial.println(targetList.error.iSYSTargetListError);
-    }
+    Serial.println("Saving all settings...");
+ result = radar.saveAllSettings(deviceAddress,timeout);
+  if (result == ERR_OK) {
+    Serial.println(" All settings saved successfully");
   } else {
-    Serial.print("Failed to get target list - error code: ");
-    Serial.println(res);
+    Serial.print(" Failed to save all settings. Error code: 0x");
+    Serial.println(result, HEX);
   }
-
-  delay(300);
 }
+
+void loop() 
+{
+  // Get target list from OUTPUT 1 (configured for both directions)
+  iSYSResult_t result = radar.getTargetList32(&targetList, deviceAddress, timeout, ISYS_OUTPUT_1);
+  
+  if (result == ERR_OK) {
+    Serial.print("Detected ");
+    Serial.print(targetList.nrOfTargets);
+    Serial.println(" targets:");
+    
+    for (int i = 0; i < targetList.nrOfTargets; i++) {
+      Serial.print("Target ");
+      Serial.print(i + 1);
+      Serial.print(": Range=");
+      Serial.print(targetList.targets[i].range);
+      Serial.print("m, Velocity=");
+      Serial.print(targetList.targets[i].velocity);
+      Serial.print("m/s, Signal=");
+      Serial.print(targetList.targets[i].signal);
+      Serial.print(", Angle=");
+      Serial.print(targetList.targets[i].angle);
+      Serial.println("°");
+    }
+  } else if (result == TARGET_LIST_ACQUISITION_NOT_STARTED) {
+    Serial.println("Acquisition not started");
+  } else {
+    Serial.print("Error getting target list: ");
+    Serial.println(result);
+  }
+  
+  delay(1000); // Update every second
+}
+  

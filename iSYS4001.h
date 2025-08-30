@@ -132,6 +132,17 @@ union iSYSTargetListError_u
     uint32_t dummy;
 };
 
+typedef enum iSYSDirection_type
+{
+    ISYS_TARGET_DIRECTION_APPROACHING = 1,
+    ISYS_TARGET_DIRECTION_RECEDING = 2,
+    //ISYS_TARGET_DIRECTION_BOTH = 3
+    
+    ISYS_TARGET_DIRECTION_BOTH = ISYS_TARGET_DIRECTION_APPROACHING | ISYS_TARGET_DIRECTION_RECEDING,
+    
+} iSYSDirection_type_t;
+
+
 typedef struct iSYSTargetList {
     union iSYSTargetListError_u error;
     uint8_t outputNumber;
@@ -175,6 +186,17 @@ public:
 
     iSYSResult_t iSYS_setOutputSignalMin(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout);
+
+
+/***************************************************************  
+ *  SET VELOCITY DIRECTION FUNCTION  
+ ***************************************************************/
+
+    iSYSResult_t iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t direction, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t *direction, uint8_t destAddress, uint32_t timeout);
+
+
+
 
 /***************************************************************  
  *  EEPROM COMMAND FUNCTIONS 
