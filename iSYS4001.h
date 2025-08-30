@@ -19,71 +19,27 @@ typedef enum iSYSResult
 {
     // ===== SUCCESS CODES =====
     ERR_OK                                  = 0x0000,   // (0)
-    
-    // ===== SYSTEM INITIALIZATION ERRORS =====
-    ERR_FUNCTION_DEPRECATED                 = 0x0001,   // (1)
-    ERR_DLL_NOT_FINISHED                    = 0x0002,   // (2)
-    ERR_HANDLE_NOT_INITIALIZED              = 0x0003,   // (3)
-    ERR_COMPORT_SYSTEM_INIT_FAILED          = 0x0004,   // (4)
-    ERR_COMPORT_SYSTEM_ALREADY_INITIALIZED  = 0x0005,   // (5)
-    
-    // ===== COM PORT CONFIGURATION ERRORS =====
-    ERR_COMPORT_DOESNT_EXIST                = 0x0010,   // (16)
-    ERR_COMPORT_CANT_INITIALIZE             = 0x0011,   // (17)
-    ERR_COMPORT_ACCESS_DENIED               = 0x0012,   // (18)
-    ERR_COMPORT_BAUDRATE_NOT_VALID          = 0x0013,   // (19)
-    ERR_COMPORT_CANT_OPEN                   = 0x0014,   // (20)
-    ERR_COMPORT_ALREADY_INITIALIZED         = 0x0015,   // (21)
-    ERR_COMPORT_EQUALS_NULL                 = 0x0016,   // (22)
-    
-    // ===== COM PORT PARAMETER SETTING ERRORS =====
-    ERR_COMPORT_CANT_SET_FLOW_CONTROL       = 0x0020,   // (32)
-    ERR_COMPORT_CANT_SET_PARITY             = 0x0021,   // (33)
-    ERR_COMPORT_CANT_SET_STOP_BITS          = 0x0022,   // (34)
-    ERR_COMPORT_CANT_SET_DATA_BITS          = 0x0023,   // (35)
-    ERR_COMPORT_CANT_SET_BAUDRATE           = 0x0024,   // (36)
-    
-    // ===== COM PORT I/O OPERATION ERRORS =====
-    ERR_COMPORT_NOT_OPEN                    = 0x0030,   // (48)
-    ERR_COMPORT_NOT_READABLE                = 0x0031,   // (49)
-    ERR_COMPORT_NOT_WRITEABLE               = 0x0032,   // (50)
-    ERR_COMPORT_CANT_WRITE                  = 0x0033,   // (51)
-    ERR_COMPORT_CANT_READ                   = 0x0034,   // (52)
-    ERR_COMPORT_LESS_DATA_READ              = 0x0035,   // (53)
-    
-    // ===== COMMAND TRANSMISSION ERRORS =====
-    ERR_COMMAND_NOT_WRITTEN                 = 0x0040,   // (64)
-    ERR_COMMAND_NOT_READ                    = 0x0041,   // (65)
-    ERR_COMMAND_NOT_ACCEPTED                = 0x0042,   // (66)
-    ERR_COMMAND_UNEXPECTED_FRAMETYPE        = 0x0043,   // (67)
-    
+     
     // ===== RESPONSE RECEPTION ERRORS =====
-    ERR_COMMAND_NO_DATA_RECEIVED            = 0x0050,   // (80)
-    ERR_COMMAND_NO_VALID_FRAME_FOUND        = 0x0051,   // (81)
-    ERR_COMMAND_RX_FRAME_DAMAGED            = 0x0052,   // (82)
-    ERR_COMMAND_RX_FRAME_LENGTH             = 0x0053,   // (83)
-    ERR_COMMAND_MAX_DATA_OVERFLOW           = 0x0054,   // (84)
-    ERR_COMMAND_MAX_IQPAIRS_OVERFLOW        = 0x0055,   // (85)
-    ERR_UNDEFINED_READ                      = 0x0056,   // (86)
-    ERR_INVALID_CHECKSUM                    = 0x0057,   // (87)
-    
-    // ===== GENERAL OPERATION ERRORS =====
-    ERR_COMMAND_FAILURE                     = 0x0060,   // (96)
-    ERR_NULL_POINTER                        = 0x0061,   // (97)
-    ERR_CALC_CORRECTION_PARAMS              = 0x0062,   // (98)
-    ERR_PARAMETER_OUT_OF_RANGE              = 0x0063,   // (99)
-    ERR_OUTPUT_OUT_OF_RANGE                 = 0x0064,   // (99)
-    ERR_TIMEOUT                             = 0X0065,
-    
+    ERR_COMMAND_NO_DATA_RECEIVED            = 0x0001,   // (1)
+    ERR_COMMAND_NO_VALID_FRAME_FOUND        = 0x0002,   // (2)
+    ERR_COMMAND_RX_FRAME_DAMAGED            = 0x0003,   // (3)
+    ERR_COMMAND_RX_FRAME_LENGTH             = 0x0004,   // (4)
+    ERR_INVALID_CHECKSUM                    = 0x0005,   // (5)
+    ERR_NULL_POINTER                        = 0x0006,   // (6)
+    ERR_PARAMETER_OUT_OF_RANGE              = 0x0007,   // (7)
+    ERR_OUTPUT_OUT_OF_RANGE                 = 0x0008,   // (8)
+    ERR_TIMEOUT                             = 0x0009    // (9)
+
 } iSYSResult_t;
 
 typedef enum iSYSTargetListError
 {
-    TARGET_LIST_OK                          = 0x00,
-    TARGET_LIST_FULL                        = 0x01,
-    TARGET_LIST_REFRESHED                   = 0x02,
-    TARGET_LIST_ALREADY_REQUESTED           = 0x03,
-    TARGET_LIST_ACQUISITION_NOT_STARTED     = 0x04
+    TARGET_LIST_OK                          
+    TARGET_LIST_FULL                        
+    TARGET_LIST_REFRESHED                   
+    TARGET_LIST_ALREADY_REQUESTED           
+    TARGET_LIST_ACQUISITION_NOT_STARTED     
 }iSYSTargetListError_t;
 
 typedef enum iSYSOutputNumber
@@ -121,10 +77,10 @@ typedef enum iSYSEEPROMSubFunction
 } iSYSEEPROMSubFunction_t;
 
 typedef struct iSYSTarget {
-    float signal;           /* signal indicator */
-    float velocity;         /* radial velocity in m/s */
+    float signal;           /* signal indicator dB */
+    float velocity;         /* velocity in m/s */
     float range;            /* range in m */
-    float angle;            /* angle of detected object [°] */
+    float angle;            /* angle of detected object [°/Deg] */
 } iSYSTarget_t;
 
 union iSYSTargetListError_u
@@ -137,10 +93,7 @@ typedef enum iSYSDirection_type
 {
     ISYS_TARGET_DIRECTION_APPROACHING = 1,
     ISYS_TARGET_DIRECTION_RECEDING = 2,
-    //ISYS_TARGET_DIRECTION_BOTH = 3
-    
-    ISYS_TARGET_DIRECTION_BOTH = ISYS_TARGET_DIRECTION_APPROACHING | ISYS_TARGET_DIRECTION_RECEDING,
-    
+    ISYS_TARGET_DIRECTION_BOTH = ISYS_TARGET_DIRECTION_APPROACHING | ISYS_TARGET_DIRECTION_RECEDING
 } iSYSDirection_type_t;
 
 
@@ -190,7 +143,7 @@ public:
 
 
 /***************************************************************  
- *  SET VELOCITY DIRECTION FUNCTION  
+ *  SET/GET VELOCITY DIRECTION FUNCTION  
  ***************************************************************/
 
     iSYSResult_t iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t direction, uint8_t destAddress, uint32_t timeout);
@@ -198,14 +151,10 @@ public:
 
 
 
-
-
-
 /***************************************************************  
  *  EEPROM COMMAND FUNCTIONS 
  ***************************************************************/
 
-    iSYSResult_t sendEEPROMCommand(iSYSEEPROMSubFunction_t subFunction,uint8_t destAddress,uint32_t timeout);
     iSYSResult_t setFactorySettings(uint8_t destAddress, uint32_t timeout);
     iSYSResult_t saveSensorSettings(uint8_t destAddress,uint32_t timeout);
     iSYSResult_t saveApplicationSettings(uint8_t destAddress,uint32_t timeout);
@@ -251,7 +200,7 @@ private:
 /***************************************************************  
  *  EEPROM COMMAND HELPER FUNCTIONS
  ***************************************************************/    
- 
+    iSYSResult_t sendEEPROMCommand(iSYSEEPROMSubFunction_t subFunction,uint8_t destAddress,uint32_t timeout);
     iSYSResult_t sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunction, uint8_t destAddress);
     iSYSResult_t receiveEEPROMAcknowledgement(uint8_t destAddress,uint32_t timeout);
     uint8_t calculateFCS(const uint8_t* data, uint8_t startIndex, uint8_t endIndex);
