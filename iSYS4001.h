@@ -72,7 +72,8 @@ typedef enum iSYSResult
     ERR_NULL_POINTER                        = 0x0061,   // (97)
     ERR_CALC_CORRECTION_PARAMS              = 0x0062,   // (98)
     ERR_PARAMETER_OUT_OF_RANGE              = 0x0063,   // (99)
-    ERR_TIMEOUT                             = 0X0064,
+    ERR_OUTPUT_OUT_OF_RANGE                 = 0x0064,   // (99)
+    ERR_TIMEOUT                             = 0X0065,
     
 } iSYSResult_t;
 
