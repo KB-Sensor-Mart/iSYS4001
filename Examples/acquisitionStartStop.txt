@@ -1,71 +1,81 @@
+/*
+  iSYS4001 Radar Sensor (Stop + Start Acquisition + Target List)
+  ------------------------------------------------------------------------------
+  This sketch demonstrates how to use the iSYS4001 radar module with an ESP32.
+  It initializes communication, stops any previous acquisition session,
+  starts a fresh acquisition, and continuously requests the target list.
+
+  Features:
+    - Initializes communication with iSYS4001 over Serial2 (pins RX=16, TX=17).
+    - Stops acquisition first to ensure a clean state.
+    - Starts radar acquisition using iSYS_startAcquisition().
+    - Continuously requests the target list and prints:
+        * Signal strength
+        * Velocity (m/s)
+        * Range (m)
+        * Angle (degrees)
+    - Retries once if the radar does not respond within the timeout.
+    - Cleans stale UART data before each request.
+
+  Hardware:
+    - ESP32 board
+    - iSYS4001 radar module connected via UART2
+        ESP32 Pin 16 (RX) ←→ Radar TX
+        ESP32 Pin 17 (TX) ←→ Radar RX
+        GND shared between ESP32 and radar
+
+  Notes:
+    - DESTINATION_ADDRESS (default: 0x80) may need to be adjusted depending on setup.
+    - TIMEOUT_MS defines how long to wait for a response.
+    - Stopping acquisition before starting ensures stable radar behavior.
+
+*/
+
 #include "iSYS4001.h"
 
-
+// Radar object using Serial2
 iSYS4001 radar(Serial2, 115200);
 
 // Storage for decoded targets
 iSYSTargetList_t targetList;
 
 // Configuration
-const uint8_t DESTINATION_ADDRESS = 0x81;  
-const uint32_t TIMEOUT_MS = 300;  
+const uint8_t DESTINATION_ADDRESS = 0x80;   // Radar device address
+const uint32_t TIMEOUT_MS = 300;            // Response timeout (ms)
 
-
-
-
-
-void setup() 
-{
-  Serial.begin(115200);
-  while (!Serial) { delay(10); }
-
-
-  Serial2.begin(115200, SERIAL_8N1, 16, 17);
-
-
-  Serial.print("Dest Addr: 0x"); Serial.println(DESTINATION_ADDRESS, HEX);
-  Serial.print("Timeout: "); Serial.print(TIMEOUT_MS); Serial.println(" ms");
-  Serial.println("Output: 1 (default)");
-
-  // Flush
-  while (Serial2.available()) 
-  { 
-    Serial2.read(); 
-  }
-
-  delay(500);
-
-
-//   iSYSResult_t iSYS_stopAcquisition = radar.iSYS_stopAcquisition(DESTINATION_ADDRESS, TIMEOUT_MS); 
-//   if (iSYS_stopAcquisition != ERR_OK) {
-//   Serial.print("iSYS_stopAcquisition failed: ");
-//   Serial.println(iSYS_stopAcquisition, HEX);
-// }
-
-
-  iSYSResult_t iSYS_startAcquisition = radar.iSYS_startAcquisition(DESTINATION_ADDRESS, TIMEOUT_MS); 
-  if (iSYS_startAcquisition != ERR_OK) {
-  Serial.print("iSYS_startAcquisition failed: ");
-  Serial.println(iSYS_startAcquisition, HEX);
-}
-
-
-
-}
-
-void loop() {
-  Serial.println("\n--- Requesting Target List ---");
-
+// ---------------------- Helper Functions ---------------------- //
+void flushSerial2() {
   while (Serial2.available()) { Serial2.read(); }
+}
 
-  iSYSResult_t res = radar.getTargetList32(
-    &targetList,
-    DESTINATION_ADDRESS,
-    TIMEOUT_MS
-  );
+void stopAcquisition() {
+  iSYSResult_t result = radar.iSYS_stopAcquisition(DESTINATION_ADDRESS, TIMEOUT_MS);
+  if (result == ERR_OK) {
+    Serial.println("Acquisition stopped successfully.");
+  } else {
+    Serial.print("iSYS_stopAcquisition failed - code: 0x");
+    Serial.println(result, HEX);
+  }
+}
 
+void startAcquisition() {
+  iSYSResult_t result = radar.iSYS_startAcquisition(DESTINATION_ADDRESS, TIMEOUT_MS);
+  if (result == ERR_OK) {
+    Serial.println("Acquisition started successfully.");
+  } else {
+    Serial.print("iSYS_startAcquisition failed - code: 0x");
+    Serial.println(result, HEX);
+  }
+}
+
+void printTargetList() {
+  iSYSResult_t res = radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS);
+
+  // Retry once if the first attempt fails
   if (res != ERR_OK) {
-    Serial.print("First attempt failed (code "); Serial.print(res); Serial.println(") - retrying once...");
+    Serial.print("First attempt failed (code ");
+    Serial.print(res);
+    Serial.println(") - retrying...");
     res = radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS);
   }
 
@@ -77,11 +87,11 @@ void loop() {
       Serial.println(targetList.outputNumber);
 
       for (uint16_t i = 0; i < targetList.nrOfTargets && i < MAX_TARGETS; i++) {
-        Serial.print("#"); Serial.print(i + 1); Serial.println("");
-        Serial.print("  Signal: "); Serial.println(targetList.targets[i].signal);
-        Serial.print("  Velocity: "); Serial.print(targetList.targets[i].velocity); Serial.println(" m/s");
-        Serial.print("  Range: "); Serial.print(targetList.targets[i].range); Serial.println(" m");
-        Serial.print("  Angle: "); Serial.print(targetList.targets[i].angle); Serial.println(" deg");
+        Serial.printf("Target #%u\n", i + 1);
+        Serial.printf("  Signal: %.2f dB\n", targetList.targets[i].signal);
+        Serial.printf("  Velocity: %.2f m/s\n", targetList.targets[i].velocity);
+        Serial.printf("  Range: %.2f m\n", targetList.targets[i].range);
+        Serial.printf("  Angle: %.2f deg\n", targetList.targets[i].angle);
       }
     } else {
       Serial.print("Target list error code: ");
@@ -91,7 +101,33 @@ void loop() {
     Serial.print("Failed to get target list - error code: ");
     Serial.println(res);
   }
-
-  delay(300);
 }
 
+// ---------------------- Arduino Setup & Loop ---------------------- //
+void setup() {
+  Serial.begin(115200);
+  while (!Serial) { delay(10); }
+
+  // Initialize Serial2 for radar
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);
+
+  Serial.println("\n--- Radar Initialization ---");
+  Serial.printf("Dest Addr: 0x%X\n", DESTINATION_ADDRESS);
+  Serial.printf("Timeout: %lu ms\n", TIMEOUT_MS);
+  Serial.println("Output: 1 (default)");
+
+  flushSerial2();
+  delay(500);
+
+  // Stop and then start acquisition for a clean state
+  stopAcquisition();
+  delay(200);
+  startAcquisition();
+}
+
+void loop() {
+  Serial.println("\n--- Requesting Target List ---");
+  flushSerial2();
+  printTargetList();
+  delay(300);
+}

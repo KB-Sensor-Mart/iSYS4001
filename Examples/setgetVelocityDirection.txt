@@ -1,3 +1,26 @@
+/*
+  iSYS4001 Velocity Direction + Target List Demo
+  -----------------------------------------------
+  This sketch runs on ESP32 and communicates with the InnoSenT iSYS4001 radar module
+  over UART2 (default pins: RX=16, TX=17).
+
+  Features:
+    - Configures Output 1 direction (APPROACHING, RECEDING, or BOTH).
+    - Saves configuration settings to the radar.
+    - Starts acquisition of targets.
+    - Continuously retrieves and prints the target list with:
+        * Range (m)
+        * Velocity (m/s)
+        * Signal strength
+        * Angle (degrees)
+    - Periodically verifies that Output 1 direction remains correctly set.
+
+  Notes:
+    - Output direction is configured using iSYS_setOutputDirection().
+    - Target list velocity values are reported in meters per second (m/s).
+    - You can convert velocity to km/h by multiplying by 3.6 if needed.
+*/
+
 #include "iSYS4001.h"
 
 // Use Serial2 (ESP32 default pins: RX=16, TX=17). Adjust if needed for your board.
@@ -7,80 +30,56 @@ iSYS4001 radar(Serial2, 115200);
 iSYSTargetList_t targetList;
 
 // Configuration
-const uint8_t deviceAddress = 0x81;  // Adjust per your device config
-const uint32_t timeout = 300;          // Response timeout
+const uint8_t deviceAddress = 0x80;   // Adjust per your device config
+const uint32_t timeout       = 300;   // Response timeout
 
-void setup() 
-{
+void setup() {
   Serial.begin(115200);
   while (!Serial) { delay(10); }
 
-  // Initialize Serial2 explicitly with pins on ESP32
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
-
-  // Flush any stale bytes from radar UART
   Serial2.flush();
-  
-  Serial.println("iSYS4001 Radar Sensor Initialized");
-  
-  // Configure output direction for OUTPUT 1
-  // Set to detect both approaching and receding targets
-  // iSYSResult_t result = radar.iSYS_setOutputDirection(ISYS_OUTPUT_1, ISYS_TARGET_DIRECTION_BOTH, deviceAddress, timeout);
-  
-  // if (result == ERR_OK) {
-  //   Serial.println("Output direction set successfully to BOTH directions");
-  // } else {
-  //   Serial.print("Failed to set output direction. Error code: ");
-  //   Serial.println(result);
-  // }
-  
-  // You can also set different directions for different outputs
-  // // For OUTPUT 2: only approaching targets
-  // iSYSResult_t result = radar.iSYS_setOutputDirection(ISYS_OUTPUT_2, ISYS_TARGET_DIRECTION_APPROACHING, deviceAddress, timeout);
-  // if (result == ERR_OK) {
-  //   Serial.println("OUTPUT 2 direction set to APPROACHING only");
-  // }
-  
-  // For OUTPUT 3: only receding targets  
-  iSYSResult_t result = radar.iSYS_setOutputDirection(ISYS_OUTPUT_2,ISYS_TARGET_DIRECTION_BOTH, deviceAddress, timeout);
-  if (result == ERR_OK) {
-    Serial.println("OUTPUT 1 direction set to RECEDING only");
-  }
-  
-  // // Start acquisition
-  // iSYSResult_t result = radar.iSYS_startAcquisition(deviceAddress, timeout);
-  // if (result == ERR_OK) {
-  //   Serial.println("Radar acquisition started");
-  // } else {
-  //   Serial.println("Failed to start acquisition");
-  // }
 
+  Serial.println("=== iSYS4001 Radar Sensor Initialized ===");
 
-    Serial.println("Saving all settings...");
- result = radar.saveAllSettings(deviceAddress,timeout);
+  // Configure OUTPUT 1 for BOTH directions
+  iSYSResult_t result = radar.iSYS_setOutputDirection(
+      ISYS_OUTPUT_1, ISYS_TARGET_DIRECTION_BOTH, deviceAddress, timeout
+  );
   if (result == ERR_OK) {
-    Serial.println(" All settings saved successfully");
+    Serial.println("OUTPUT 1 direction set to BOTH directions");
   } else {
-    Serial.print(" Failed to save all settings. Error code: 0x");
+    Serial.print("Failed to set OUTPUT 1 direction. Error code: ");
+    Serial.println(result);
+  }
+
+  // Save configuration
+  Serial.println("Saving all settings...");
+  result = radar.saveAllSettings(deviceAddress, timeout);
+  if (result == ERR_OK) {
+    Serial.println("All settings saved successfully");
+  } else {
+    Serial.print("Failed to save all settings. Error code: 0x");
     Serial.println(result, HEX);
   }
 
-
-
-
-
-
-
-
+  // Start acquisition
+  result = radar.iSYS_startAcquisition(deviceAddress, timeout);
+  if (result == ERR_OK) {
+    Serial.println("Radar acquisition started");
+  } else {
+    Serial.println("Failed to start acquisition");
+  }
 }
 
-void loop() 
-{
+void loop() {
   static uint8_t directionCheckCounter = 0;
-  
-  // Get target list from OUTPUT 1 (configured for both directions)
-  iSYSResult_t result = radar.getTargetList32(&targetList, deviceAddress, timeout, ISYS_OUTPUT_2);
-  
+
+  // Read targets from OUTPUT 1
+  iSYSResult_t result = radar.getTargetList32(
+      &targetList, deviceAddress, timeout, ISYS_OUTPUT_1
+  );
+
   if (result == ERR_OK) {
     Serial.print("Detected ");
     Serial.print(targetList.nrOfTargets);
@@ -91,9 +90,9 @@ void loop()
       Serial.print(i + 1);
       Serial.print(": Range=");
       Serial.print(targetList.targets[i].range);
-      Serial.print("m, Velocity=");
+      Serial.print(" m, Velocity=");
       Serial.print(targetList.targets[i].velocity);
-      Serial.print("m/s, Signal=");
+      Serial.print(" m/s, Signal=");
       Serial.print(targetList.targets[i].signal);
       Serial.print(", Angle=");
       Serial.print(targetList.targets[i].angle);
@@ -105,14 +104,14 @@ void loop()
     Serial.print("Error getting target list: ");
     Serial.println(result);
   }
-  
-  // Check output direction every 10 seconds (every 10th loop iteration)
+
+  // Periodically verify output direction
   directionCheckCounter++;
   if (directionCheckCounter >= 10) {
     directionCheckCounter = 0;
     
     iSYSDirection_type_t currentDirection;
-    result = radar.iSYS_getOutputDirection(ISYS_OUTPUT_2,&currentDirection, deviceAddress, timeout);
+    result = radar.iSYS_getOutputDirection(ISYS_OUTPUT_1, &currentDirection, deviceAddress, timeout);
     if (result == ERR_OK) {
       Serial.print("OUTPUT 1 direction check: ");
       if (currentDirection == ISYS_TARGET_DIRECTION_APPROACHING) {
@@ -130,7 +129,6 @@ void loop()
       Serial.println(result, HEX);
     }
   }
-  
-  delay(1000); // Update every second
+
+  delay(1000);
 }
-  

@@ -1,21 +1,29 @@
+/*
+  ESP32 UART2 Raw Command Test for iSYS Radar
+  -------------------------------------------
+  - Sends a fixed 11-byte command frame to the radar via UART2 (pins RX=16, TX=17).
+  - Prints the transmitted bytes (TX) and received response (RX) in HEX format.
+  - Useful for debugging raw protocol without higher-level libraries.
+*/
+
 #include <Arduino.h>
 
 // Use UART2 (pins 16 = RX, 17 = TX on ESP32)
 HardwareSerial RadarSerial(2);
 
-// Command to send (11 bytes)
+// Example command to send (11 bytes)
 uint8_t cmd[] = {0x68, 0x05, 0x05, 0x68, 0x80, 0x01, 0xDA, 0x01, 0x20, 0x7C, 0x16};
 
 void setup() {
-  Serial.begin(115200);        
+  Serial.begin(115200);
   RadarSerial.begin(115200, SERIAL_8N1, 16, 17); // baud, config, RX, TX
-  Serial.println("Starting...");
+  Serial.println("Starting raw UART command test...");
 }
 
 void loop() {
   // --- Send Command ---
   Serial.print("TX: ");
-  for (int i = 0; i < sizeof(cmd); i++) {
+  for (size_t i = 0; i < sizeof(cmd); i++) {
     if (cmd[i] < 0x10) Serial.print("0");
     Serial.print(cmd[i], HEX);
     Serial.print(" ");
@@ -23,6 +31,7 @@ void loop() {
   Serial.println();
 
   RadarSerial.write(cmd, sizeof(cmd));
+  RadarSerial.flush(); // ensure bytes are sent
 
   // --- Receive Response ---
   if (RadarSerial.available()) {
@@ -36,5 +45,5 @@ void loop() {
     Serial.println();
   }
 
-  delay(100); // 100 ms
+  delay(100); // loop delay
 }

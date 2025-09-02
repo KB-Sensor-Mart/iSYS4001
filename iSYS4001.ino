@@ -1,3 +1,21 @@
+/*
+  iSYS4001 Velocity Configuration + Target List Demo
+  ---------------------------------------------------
+  This sketch runs on ESP32 and communicates with the InnoSenT iSYS4001 radar module
+  over UART2 (default pins: RX=16, TX=17).
+
+  Features:
+    - Configures minimum and maximum velocity thresholds (in km/h) for Output 1.
+    - Saves application settings to the radar.
+    - Continuously requests the target list and prints detected targets
+      (signal, velocity [m/s], range [m], angle [deg]) to Serial Monitor.
+
+  Notes:
+    - The iSYS4001 expects velocity values in km/h when using
+      iSYS_setOutputVelocityMin() and iSYS_setOutputVelocityMax().
+    - The target list velocity values are returned in meters per second (m/s).
+*/
+
 #include "iSYS4001.h"
 
 // Use Serial2 (ESP32 default pins: RX=16, TX=17). Adjust if needed for your board.
@@ -5,16 +23,14 @@ iSYS4001 radar(Serial2, 115200);
 
 // Storage for decoded targets
 iSYSTargetList_t targetList;
-iSYSDirection_type_t Setvelocity_direction;
 
 // Configuration
-const uint8_t DESTINATION_ADDRESS = 0x80;  // Adjust per your device config
-const uint32_t TIMEOUT_MS = 300;          // Response timeout
+const uint8_t DESTINATION_ADDRESS = 0x80;  // Radar device address
+const uint32_t TIMEOUT_MS = 300;           // Response timeout
+uint8_t SetminVelocityValue = 18;          // Minimum velocity threshold (km/h)
+uint8_t SetmaxVelocityValue = 217;         // Maximum velocity threshold (km/h)
 
-
-
-void setup() 
-{
+void setup() {
   Serial.begin(115200);
   while (!Serial) { delay(10); }
 
@@ -27,116 +43,67 @@ void setup()
   Serial.println("Output: 1 (default)");
 
   // Flush any stale bytes from radar UART
-  while (Serial2.available()) 
-  { 
-    Serial2.read(); 
-  }
-
+  while (Serial2.available()) { Serial2.read(); }
   delay(500);
 
-///////////////////////////////////////////////////// GET MINIMUM RANGE FUNCTION ///////////////////////////
-    float rangeMin;
-    iSYSResult_t iSYS_getOutputRangeMin = radar.iSYS_getOutputRangeMin(ISYS_OUTPUT_1, &rangeMin, DESTINATION_ADDRESS, TIMEOUT_MS);
-  if (iSYS_getOutputRangeMin == ERR_OK) {
-    Serial.print("Current Output Range Minimum: ");
-    Serial.print(rangeMin);
-    Serial.println(" m");
+  // --- Set minimum velocity (km/h) ---
+  iSYSResult_t iSYS_setOutputVelocityMin = radar.iSYS_setOutputVelocityMin(
+    ISYS_OUTPUT_1, SetminVelocityValue, DESTINATION_ADDRESS, TIMEOUT_MS
+  );
+  if (iSYS_setOutputVelocityMin != ERR_OK) {
+    Serial.print("iSYS_setOutputVelocityMin failed: ");
+    Serial.println(iSYS_setOutputVelocityMin, HEX);
   } else {
-    Serial.print("iSYS_getOutputRangeMin failed: ");
-    Serial.println(iSYS_getOutputRangeMin, HEX);
+    Serial.print("Minimum velocity set to: ");
+    Serial.print(SetminVelocityValue);
+    Serial.println(" km/h");
   }
 
-
-  
-/////////////////////////////////////////////////////// GET MAXIMUM RANGE FUNCTION ///////////////////////////
-
-   float rangeMax;
-  iSYSResult_t iSYS_getOutputRangeMax = radar.iSYS_getOutputRangeMax(ISYS_OUTPUT_1, &rangeMax, DESTINATION_ADDRESS, TIMEOUT_MS);
-  if (iSYS_getOutputRangeMax == ERR_OK) {
-    Serial.print("Current Output Range Maximum: ");
-    Serial.print(rangeMax);
-    Serial.println(" m");
+  // --- Set maximum velocity (km/h) ---
+  iSYSResult_t iSYS_setOutputVelocityMax = radar.iSYS_setOutputVelocityMax(
+    ISYS_OUTPUT_1, SetmaxVelocityValue, DESTINATION_ADDRESS, TIMEOUT_MS
+  );
+  if (iSYS_setOutputVelocityMax != ERR_OK) {
+    Serial.print("iSYS_setOutputVelocityMax failed: ");
+    Serial.println(iSYS_setOutputVelocityMax, HEX);
   } else {
-    Serial.print("iSYS_getOutputRangeMax failed: ");
-    Serial.println(iSYS_getOutputRangeMax, HEX);
+    Serial.print("Maximum velocity set to: ");
+    Serial.print(SetmaxVelocityValue);
+    Serial.println(" km/h");
   }
 
-///////////////////////////////////////////////////// GET MINIMUM VELOCITY FUNCTION ///////////////////////////
-    float velocityMin;
-    iSYSResult_t iSYS_getOutputVelocityMin = radar.iSYS_getOutputVelocityMin(ISYS_OUTPUT_1, &velocityMin, DESTINATION_ADDRESS, TIMEOUT_MS);
-  if (iSYS_getOutputVelocityMin == ERR_OK) {
-    Serial.print("Current Output Velocity Minimum: ");
-    Serial.print(velocityMin);
-    Serial.println(" Km/h");
+  // --- Save application settings ---
+  iSYSResult_t saveApplicationSettings = radar.saveApplicationSettings(
+    DESTINATION_ADDRESS, TIMEOUT_MS
+  );
+  if (saveApplicationSettings != ERR_OK) {
+    Serial.print("Failed to save application settings. Error: ");
+    Serial.println(saveApplicationSettings, HEX);
   } else {
-    Serial.print("iSYS_getOutputVelocityMin failed: ");
-    Serial.println(iSYS_getOutputVelocityMin, HEX);
+    Serial.println("Application settings saved successfully.");
   }
-
-
-  
-/////////////////////////////////////////////////////// GET MAXIMUM VELOCITY FUNCTION ///////////////////////////
-
-   float velocityMax;
-  iSYSResult_t iSYS_getOutputVelocityMax = radar.iSYS_getOutputVelocityMax(ISYS_OUTPUT_1, &velocityMax, DESTINATION_ADDRESS, TIMEOUT_MS);
-  if (iSYS_getOutputVelocityMax == ERR_OK) {
-    Serial.print("Current Output  Velocity Maximum: ");
-    Serial.print(velocityMax);
-    Serial.println(" Km/h");
-  } else {
-    Serial.print("iSYS_getOutputVelocityMax failed: ");
-    Serial.println(iSYS_getOutputVelocityMax, HEX);
-  }
-
-///////////////////////////////////////////////////// GET MINIMUM SIGNAL FUNCTION ///////////////////////////
-    float signalMin;
-    iSYSResult_t iSYS_getOutputSignalMin = radar.iSYS_getOutputSignalMin(ISYS_OUTPUT_1, &signalMin, DESTINATION_ADDRESS, TIMEOUT_MS);
-  if (iSYS_getOutputSignalMin == ERR_OK) {
-    Serial.print("Current Output Signal Minimum: ");
-    Serial.print(signalMin);
-    Serial.println(" dB");
-  } else {
-    Serial.print("iSYS_getOutputSignalMin failed: ");
-    Serial.println(iSYS_getOutputSignalMin, HEX);
-  }
-
-
-  
-/////////////////////////////////////////////////////// GET MAXIMUM SIGNAL FUNCTION ///////////////////////////
-
-   float signalMax;
-  iSYSResult_t iSYS_getOutputSignalMax = radar.iSYS_getOutputSignalMax(ISYS_OUTPUT_1, &signalMax, DESTINATION_ADDRESS, TIMEOUT_MS);
-  if (iSYS_getOutputSignalMax == ERR_OK) {
-    Serial.print("Current Output  Signal Maximum: ");
-    Serial.print(signalMax);
-    Serial.println(" dB");
-  } else {
-    Serial.print("iSYS_getOutputSignalMax failed: ");
-    Serial.println(iSYS_getOutputSignalMax, HEX);
-  }
-
 }
-
-
 
 void loop() {
   Serial.println("\n--- Requesting Target List ---");
 
-
+  // Flush UART buffer
   while (Serial2.available()) { Serial2.read(); }
 
-
+  // Request target list
   iSYSResult_t res = radar.getTargetList32(
     &targetList,
     DESTINATION_ADDRESS,
     TIMEOUT_MS
   );
 
+  // Retry once if first attempt fails
   if (res != ERR_OK) {
     Serial.print("First attempt failed (code "); Serial.print(res); Serial.println(") - retrying once...");
     res = radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS);
   }
 
+  // Handle result
   if (res == ERR_OK) {
     if (targetList.error.iSYSTargetListError == TARGET_LIST_OK) {
       Serial.print("Targets: ");
@@ -159,8 +126,6 @@ void loop() {
     Serial.print("Failed to get target list - error code: ");
     Serial.println(res);
   }
-
-
 
   delay(300);
 }

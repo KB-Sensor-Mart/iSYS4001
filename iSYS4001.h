@@ -60,6 +60,14 @@ typedef enum iSYSFilter_signal
     ISYS_RANGE_RADIAL
 } iSYSFilter_signal_t;
 
+// Missing from this header: output number enum used across API
+typedef enum iSYSOutputNumber
+{
+    ISYS_OUTPUT_1 = 1,
+    ISYS_OUTPUT_2,
+    ISYS_OUTPUT_3
+} iSYSOutputNumber_t;
+
 // EEPROM sub-function codes for saving settings
 typedef enum iSYSEEPROMSubFunction
 {
@@ -90,7 +98,8 @@ typedef enum iSYSDirection_type
 } iSYSDirection_type_t;
 
 
-typedef struct iSYSTargetList {
+typedef struct iSYSTargetList 
+{
     union iSYSTargetListError_u error;
     uint8_t outputNumber;
     uint16_t nrOfTargets;
@@ -98,7 +107,8 @@ typedef struct iSYSTargetList {
     iSYSTarget_t targets[MAX_TARGETS];
 } iSYSTargetList_t;
 
-class iSYS4001 {
+class iSYS4001 
+{
     
 public:
     iSYS4001(HardwareSerial& serial, uint32_t baud = 115200);

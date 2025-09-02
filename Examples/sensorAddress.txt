@@ -1,3 +1,20 @@
+/*
+ * iSYS4001 Radar Sensor (Change Destination Address)
+
+ * ---------------------
+ * Demonstrates how to read, set, and verify the UART address
+ * of the iSYS4001 radar sensor.
+ * 
+ * Steps:
+ *   1. Get current address using broadcast (0x00)
+ *   2. Stop acquisition before making changes
+ *   3. Set a new fixed address
+ *   4. Verify new address with another GET
+ * 
+ * Hardware:
+ *   - ESP32 using UART2 (pins RX=16, TX=17)
+ */
+
 #include <Arduino.h>
 #include "iSYS4001.h"
 
@@ -7,38 +24,53 @@ HardwareSerial RadarSerial(2);
 // Create driver instance (UART is initialized in setup)
 iSYS4001 radar(RadarSerial, 115200);
 
-// Example addresses (adjust to your setup)
-static const uint8_t CURRENT_ADDR = 0x80; // default hint; actual will be read
-static const uint8_t NEW_ADDR     = 0x81; // alternate address
+// Example addresses
+static const uint8_t ADDR_DEFAULT = 0x81;  // current
+static const uint8_t ADDR_NEW     = 0x80;  // new address to assign
 
 void setup() {
   Serial.begin(115200);
   RadarSerial.begin(115200, SERIAL_8N1, 16, 17); // baud, config, RX, TX
   delay(50);
 
-  Serial.println("iSYS4001 address demo");
+  Serial.println("=== iSYS4001 Address EXAMPLE===");
 
   // Step 1: GET current device address (using broadcast DA=0x00)
   uint8_t addr = 0xFF;
   iSYSResult_t r1 = radar.iSYS_getDeviceAddress(&addr, 0x00, 500);
-  Serial.print("GET addr result: "); Serial.println((int)r1);
-  Serial.print("Current sensor address: 0x"); if (addr < 0x10) Serial.print('0'); Serial.println(addr, HEX);
 
-  // Step 2: Toggle address
+  Serial.print("GET addr result: "); Serial.println((int)r1);
+  Serial.print("Current sensor address: 0x");
+  if (addr < 0x10) Serial.print('0');
+  Serial.println(addr, HEX);
+
   if (r1 == ERR_OK) {
-    uint8_t targetAddr = (addr == 0x80) ? 0x81 : 0x80;
-    iSYSResult_t rSet = radar.iSYS_setDeviceAddress(targetAddr, addr, 500);
+    // Step 2: Stop acquisition before making changes
+    Serial.println("Stopping acquisition...");
+    iSYSResult_t stopResult = radar.iSYS_stopAcquisition(addr, 500);
+    Serial.print("Stop acquisition result: "); Serial.println((int)stopResult);
+
+    // Step 3: Set fixed new address
+    Serial.print("Setting new address: 0x");
+    if (ADDR_NEW < 0x10) Serial.print('0');
+    Serial.println(ADDR_NEW, HEX);
+
+    iSYSResult_t rSet = radar.iSYS_setDeviceAddress(ADDR_NEW, addr, 500);
     Serial.print("SET addr result: "); Serial.println((int)rSet);
 
-    // Step 3: Verify by reading again via broadcast
+    // Step 4: Verify new address via broadcast
     uint8_t verify = 0xFF;
     iSYSResult_t rV = radar.iSYS_getDeviceAddress(&verify, 0x00, 500);
     Serial.print("VERIFY GET result: "); Serial.println((int)rV);
-    Serial.print("New sensor address: 0x"); if (verify < 0x10) Serial.print('0'); Serial.println(verify, HEX);
+    Serial.print("New sensor address: 0x");
+    if (verify < 0x10) Serial.print('0');
+    Serial.println(verify, HEX);
   }
+
+  Serial.println("FINISHED....");
 }
 
 void loop() {
   // Nothing to do repeatedly for this demo
-  delay(500);
+  delay(1000);
 }
