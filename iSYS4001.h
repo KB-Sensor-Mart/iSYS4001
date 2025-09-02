@@ -29,18 +29,20 @@ typedef enum iSYSResult
     ERR_NULL_POINTER                        = 0x0006,   // (6)
     ERR_PARAMETER_OUT_OF_RANGE              = 0x0007,   // (7)
     ERR_OUTPUT_OUT_OF_RANGE                 = 0x0008,   // (8)
-    ERR_TIMEOUT                             = 0x0009    // (9)
+    ERR_TIMEOUT                             = 0x0009,    // (9)
+    ERR_COMMAND_MAX_DATA_OVERFLOW           = 0x0010,   // (10)
+    ERR_COMMAND_FAILURE                     = 0x0011   // (11)
 
 } iSYSResult_t;
 
 typedef enum iSYSTargetListError
 {
-    TARGET_LIST_OK                          
-    TARGET_LIST_FULL                        
-    TARGET_LIST_REFRESHED                   
-    TARGET_LIST_ALREADY_REQUESTED           
+    TARGET_LIST_OK = 0,                         
+    TARGET_LIST_FULL,                        
+    TARGET_LIST_REFRESHED,                   
+    TARGET_LIST_ALREADY_REQUESTED,           
     TARGET_LIST_ACQUISITION_NOT_STARTED     
-}iSYSTargetListError_t;
+} iSYSTargetListError_t;
 
 typedef enum iSYSOutputNumber
 {
@@ -56,7 +58,7 @@ typedef enum iSYSOutput_filter
     ISYS_MEAN           ,
     ISYS_MEDIAN         ,
     ISYS_MIN            ,
-    ISYS_MAX            
+    ISYS_MAX             
 } iSYSOutput_filter_t;
 
 // Output single target filter signal (sub-function 0x16)
@@ -85,7 +87,7 @@ typedef struct iSYSTarget {
 
 union iSYSTargetListError_u
 {
-    iSYSTargetListError_t iSYSTargetListError;
+    uint8_t iSYSTargetListError;
     uint32_t dummy;
 };
 
@@ -120,26 +122,32 @@ public:
 
 
 /***************************************************************  
- *  SET RANGE MIN/MAX FUNCTIONS  
+ *  SET/GET RANGE MIN/MAX FUNCTIONS  
  ***************************************************************/
 
     iSYSResult_t iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);
-    iSYSResult_t iSYS_setOutputRangeMax( iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, float *range, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, float *range, uint8_t destAddress, uint32_t timeout);
 
 
 /***************************************************************  
- *  SET VELOCITY MIN/MAX FUNCTIONS  
+ *  SET/GET VELOCITY MIN/MAX FUNCTIONS  
  ***************************************************************/
 
     iSYSResult_t iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber, float *velocity, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber, float *velocity, uint8_t destAddress, uint32_t timeout);
 
 /***************************************************************  
- *  SET SIGNAL MIN/MAX FUNCTIONS  
+ *  SET/GET SIGNAL MIN/MAX FUNCTIONS  
  ***************************************************************/
 
     iSYSResult_t iSYS_setOutputSignalMin(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, float *signal, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, float *signal, uint8_t destAddress, uint32_t timeout);
 
 
 /***************************************************************  

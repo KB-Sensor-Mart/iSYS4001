@@ -388,6 +388,240 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
 
 
 
+//``````````````````````````````````````````````````````````` GET RANGE MIN FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, uint16_t *range, uint8_t destAddress, uint32_t timeout)
+{
+    // Input parameter validation
+    if (range == NULL) {
+        return ERR_NULL_POINTER;
+    }
+    
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
+    
+    if (timeout == 0) {
+        return ERR_TIMEOUT;
+    }
+
+    uint8_t command[11];
+    uint8_t index = 0;
+    
+    // Build command frame
+    command[index++] = 0x68;
+    command[index++] = 0x05;
+    command[index++] = 0x05;
+    command[index++] = 0x68;
+    command[index++] = destAddress;
+    command[index++] = 0x01;
+    command[index++] = 0xD4;
+    command[index++] = outputnumber;
+    command[index++] = 0x08;
+    
+    // Calculate FCS
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[index++] = fcs;
+    command[index++] = 0x16;
+
+    // Debug: print outbound frame
+    Serial.print("Sending GET Range Min command: ");
+    for (int i = 0; i < 11; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    _serial.write(command, 11);
+    _serial.flush();
+
+
+    uint8_t response[11];
+    uint32_t startTime = millis();
+    size_t responseIndex = 0;
+
+    // Read response with timeout
+    while ((millis() - startTime) < timeout && responseIndex < 11) {
+        if (_serial.available()) {
+            response[responseIndex++] = _serial.read();
+            if (response[responseIndex-1] == 0x16) break;
+        }
+    }
+
+    // Debug: print received frame
+    Serial.print("Received Range Min response: ");
+    for (int i = 0; i < responseIndex; i++) 
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10) Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    // Validate response
+    if (responseIndex == 0) {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    
+    if (responseIndex < 11) {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+    
+    // Validate response frame structure
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 || 
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
+        response[6] != 0xD4 || response[10] != 0x16) {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    
+    // Validate checksum
+    uint8_t expectedFCS = calculateFCS(response, 4, 8);
+    if (response[9] != expectedFCS) {
+        return ERR_INVALID_CHECKSUM;
+    }
+    
+    // Extract range value (bytes 7-8 contain the 16-bit range value)
+    uint16_t rawRange = (response[7] << 8) | response[8];  // big-endian
+    *range = rawRange / 10;
+
+    return ERR_OK;
+}
+
+//``````````````````````````````````````````````````````````` GET RANGE MAX FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, uint16_t *range, uint8_t destAddress, uint32_t timeout)
+{
+    if (range == NULL) {
+        return ERR_NULL_POINTER;
+    }
+    
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
+    
+    if (timeout == 0) {
+        return ERR_TIMEOUT;
+    }
+
+
+    uint8_t command[11];
+    uint8_t index = 0;
+    
+    // Build command frame
+    command[index++] = 0x68;
+    command[index++] = 0x05;
+    command[index++] = 0x05;
+    command[index++] = 0x68;
+    command[index++] = destAddress;
+    command[index++] = 0x01;
+    command[index++] = 0xD4;
+    command[index++] = outputnumber;
+    command[index++] = 0x09;
+    
+    // Calculate FCS
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[index++] = fcs;
+    command[index++] = 0x16;
+
+    // Debug: print outbound frame
+    Serial.print("Sending GET Range Max command: ");
+    for (int i = 0; i < 11; i++) 
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10) Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    _serial.write(command, 11);
+    _serial.flush();
+
+
+    uint8_t response[11];
+    uint32_t startTime = millis();
+    size_t responseIndex = 0;
+
+    // Read response with timeout
+    while ((millis() - startTime) < timeout && responseIndex < 11) {
+        if (_serial.available()) {
+            response[responseIndex++] = _serial.read();
+            if (response[responseIndex-1] == 0x16) break;
+        }
+    }
+
+    // Debug: print received frame
+    Serial.print("Received Range Max response: ");
+    for (int i = 0; i < responseIndex; i++) 
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10) Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    // Validate response
+    if (responseIndex == 0) {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    
+    if (responseIndex < 11) {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+    
+    // Validate response frame structure
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 || 
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
+        response[6] != 0xD4 || response[10] != 0x16) {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    
+    // Validate checksum
+    uint8_t expectedFCS = calculateFCS(response, 4, 8);
+    if (response[9] != expectedFCS) {
+        return ERR_INVALID_CHECKSUM;
+    }
+    
+    // Extract range value (bytes 7-8 contain the 16-bit range value)
+    uint16_t rawRange = (response[7] << 8) | response[8];  // big-endian
+    *range = rawRange / 10;
+ 
+    return ERR_OK;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 //``````````````````````````````````````````````````````````` SET RANGE MAX FUNCTION ```````````````````````````````````````````````````````````//
 
 iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
@@ -495,216 +729,6 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     return ERR_OK;
 }
 
-/***************************************************************  
- *  GET RANGE MIN/MAX FUNCTIONS 
- ***************************************************************/
-
-//``````````````````````````````````````````````````````````` GET RANGE MIN FUNCTION ```````````````````````````````````````````````````````````//
-
-iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, float *range, uint8_t destAddress, uint32_t timeout)
-{
-    // Input parameter validation
-    if (range == NULL) {
-        return ERR_NULL_POINTER;
-    }
-    
-    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
-        return ERR_OUTPUT_OUT_OF_RANGE;
-    }
-    
-    if (timeout == 0) {
-        return ERR_TIMEOUT;
-    }
-
-    uint8_t command[11];
-    uint8_t index = 0;
-    
-    // Build command frame
-    command[index++] = 0x68;
-    command[index++] = 0x05;
-    command[index++] = 0x05;
-    command[index++] = 0x68;
-    command[index++] = destAddress;
-    command[index++] = 0x01;
-    command[index++] = 0xD4;
-    command[index++] = outputnumber;
-    command[index++] = 0x08;
-    
-    // Calculate FCS
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[index++] = fcs;
-    command[index++] = 0x16;
-
-    // Debug: print outbound frame
-    Serial.print("Sending GET Range Min command: ");
-    for (int i = 0; i < 11; i++) 
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10) Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    _serial.write(command, 11);
-    _serial.flush();
-
-
-    uint8_t response[11];
-    uint32_t startTime = millis();
-    size_t responseIndex = 0;
-
-    // Read response with timeout
-    while ((millis() - startTime) < timeout && responseIndex < 11) {
-        if (_serial.available()) {
-            response[responseIndex++] = _serial.read();
-            if (response[responseIndex-1] == 0x16) break;
-        }
-    }
-
-    // Debug: print received frame
-    Serial.print("Received Range Min response: ");
-    for (int i = 0; i < responseIndex; i++) 
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10) Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    // Validate response
-    if (responseIndex == 0) {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    }
-    
-    if (responseIndex < 11) {
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    }
-    
-    // Validate response frame structure
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 || 
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
-        response[6] != 0xD4 || response[10] != 0x16) {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-    
-    // Validate checksum
-    uint8_t expectedFCS = calculateFCS(response, 4, 8);
-    if (response[9] != expectedFCS) {
-        return ERR_INVALID_CHECKSUM;
-    }
-    
-    // Extract range value (bytes 7-8 contain the 16-bit range value)
-    uint16_t rawRange = (response[7] << 8) | response[8];  // big-endian
-    *range = (float)rawRange / 10.0f;  // return in m(meters)
-
-    return ERR_OK;
-}
-
-//``````````````````````````````````````````````````````````` GET RANGE MAX FUNCTION ```````````````````````````````````````````````````````````//
-
-iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, float *range, uint8_t destAddress, uint32_t timeout)
-{
-    if (range == NULL) {
-        return ERR_NULL_POINTER;
-    }
-    
-    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3) {
-        return ERR_OUTPUT_OUT_OF_RANGE;
-    }
-    
-    if (timeout == 0) {
-        return ERR_TIMEOUT;
-    }
-
-
-    uint8_t command[11];
-    uint8_t index = 0;
-    
-    // Build command frame
-    command[index++] = 0x68;
-    command[index++] = 0x05;
-    command[index++] = 0x05;
-    command[index++] = 0x68;
-    command[index++] = destAddress;
-    command[index++] = 0x01;
-    command[index++] = 0xD4;
-    command[index++] = outputnumber;
-    command[index++] = 0x09;
-    
-    // Calculate FCS
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[index++] = fcs;
-    command[index++] = 0x16;
-
-    // Debug: print outbound frame
-    Serial.print("Sending GET Range Max command: ");
-    for (int i = 0; i < 11; i++) 
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10) Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    _serial.write(command, 11);
-    _serial.flush();
-
-
-    uint8_t response[11];
-    uint32_t startTime = millis();
-    size_t responseIndex = 0;
-
-    // Read response with timeout
-    while ((millis() - startTime) < timeout && responseIndex < 11) {
-        if (_serial.available()) {
-            response[responseIndex++] = _serial.read();
-            if (response[responseIndex-1] == 0x16) break;
-        }
-    }
-
-    // Debug: print received frame
-    Serial.print("Received Range Max response: ");
-    for (int i = 0; i < responseIndex; i++) 
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10) Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    // Validate response
-    if (responseIndex == 0) {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    }
-    
-    if (responseIndex < 11) {
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    }
-    
-    // Validate response frame structure
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 || 
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
-        response[6] != 0xD4 || response[10] != 0x16) {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-    
-    // Validate checksum
-    uint8_t expectedFCS = calculateFCS(response, 4, 8);
-    if (response[9] != expectedFCS) {
-        return ERR_INVALID_CHECKSUM;
-    }
-    
-    // Extract range value (bytes 7-8 contain the 16-bit range value)
-    uint16_t rawRange = (response[7] << 8) | response[8];  // big-endian
-    *range = (float)rawRange / 10.0f;  // return in m(meters)
-
- 
-    return ERR_OK;
-}
 
 
 /***************************************************************  
@@ -927,197 +951,12 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber
     return ERR_OK;
 }
 
-/***************************************************************  
- *  GET VELOCITY MIN/MAX FUNCTIONS 
- ***************************************************************/
-
-//``````````````````````````````````````````````````````````` GET VELOCITY MIN FUNCTION ```````````````````````````````````````````````````````````//
-
-iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber, float *velocity, uint8_t destAddress, uint32_t timeout)
-{
-    if (velocity == NULL) return ERR_NULL_POINTER;
-
-    // Request frame example:
-    // 68 05 05 68 DA 01 D4 outputnumber 0E FCS 16
-    uint8_t command[11];
-    uint8_t index = 0;
-    command[index++] = 0x68;   
-    command[index++] = 0x05;
-    command[index++] = 0x05;
-    command[index++] = 0x68;
-    command[index++] = destAddress;
-    command[index++] = 0x01;
-    command[index++] = 0xD4;
-    command[index++] = outputnumber;
-    command[index++] = 0x0C;
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[index++] = fcs;
-    command[index++] = 0x16;
-
-    // Debug: print outbound frame
-    Serial.print("Sending GET Velocity min command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10) Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    _serial.write(command, sizeof(command));
-    _serial.flush();
-
-    uint8_t response[11];
-    uint32_t startTime = millis();
-    size_t minIndex = 0;
-
-    // Read response with timeout
-    while ((millis() - startTime) < timeout && minIndex < 11) {
-        if (_serial.available()) {
-            response[minIndex++] = _serial.read();
-            if (response[minIndex-1] == 0x16) break;
-        }
-    }
-
-    for (int i = 0; i < minIndex; i++) 
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10) Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    if (minIndex == 0) {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    }
-
-    if (minIndex < 11) {
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    }
-    // Validate response frame structure (do not enforce payload bytes)
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 || 
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
-        response[6] != 0xD4 || response[10] != 0x16) 
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-
-    if (minIndex == 11) {
-        uint8_t expectedFCS = calculateFCS(response, 4, 8);
-        if (response[9] != expectedFCS)
-        {
-            return ERR_INVALID_CHECKSUM;
-        }
-    }
-
-        uint16_t rawvelocity = ((uint16_t)response[7] << 8) | (uint16_t)response[8];
-        *velocity = ((float)rawvelocity / 10.0f) * 3.6f; // return in km/h
-
-    
-    return ERR_OK;
-}
-
-//``````````````````````````````````````````````````````````` GET VELOCITY MAX FUNCTION ```````````````````````````````````````````````````````````//
-
-iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber, float *velocity, uint8_t destAddress, uint32_t timeout)
-{
-    if (velocity == NULL) return ERR_NULL_POINTER;
-
-    // Request frame example:
-    // 68 05 05 68 DA 01 D4 outputnumber 0D FCS 16
-    uint8_t command[11];
-    uint8_t index = 0;
-    command[index++] = 0x68;   
-    command[index++] = 0x05;
-    command[index++] = 0x05;
-    command[index++] = 0x68;
-    command[index++] = destAddress;
-    command[index++] = 0x01;
-    command[index++] = 0xD4;
-    command[index++] = outputnumber;
-    command[index++] = 0x0D; // velocity max selector
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[index++] = fcs;
-    command[index++] = 0x16;
-
-    // Debug: print outbound frame
-    Serial.print("Sending GET Velocity max command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10) Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    _serial.write(command, sizeof(command));
-    _serial.flush();
-
-    uint8_t response[11];
-    uint32_t startTime = millis();
-    size_t maxIndex = 0;
-
-    // Read response with timeout
-    while ((millis() - startTime) < timeout && maxIndex < 11) {
-        if (_serial.available()) {
-            response[maxIndex++] = _serial.read();
-            if (response[maxIndex-1] == 0x16) break;
-        }
-    }
-
-    for (int i = 0; i < maxIndex; i++) 
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10) Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    if (maxIndex == 0) {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    }
-
-    if (maxIndex < 11) {
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    }
-    // Validate response frame structure (do not enforce payload bytes)
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 || 
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
-        response[6] != 0xD4 || response[10] != 0x16) 
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-\
-    if (maxIndex == 11) {
-        uint8_t expectedFCS = calculateFCS(response, 4, 8);
-        if (response[9] != expectedFCS)
-        {
-            return ERR_INVALID_CHECKSUM;
-        }
-    }
-
-    uint16_t rawvelocity = ((uint16_t)response[7] << 8) | (uint16_t)response[8];
-    *velocity = ((float)rawvelocity / 10.0f) * 3.6f; // return in km/h
-
-
-    return ERR_OK;
-}
-
-
-
-
-
-
 
 
 
 
 /***************************************************************  
- *  SET SIGNAL MIN/MAX FUNCTIONS
+ *  SIGNAL MIN MAX FUNCTIONS
  ***************************************************************/
 
 //``````````````````````````````````````````````````````````` SET SIGNAL MIN FUNCTION ```````````````````````````````````````````````````````````//
@@ -1332,187 +1171,6 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, 
             return ERR_INVALID_CHECKSUM;
         }
     }
-    
-    return ERR_OK;
-}
-
-/***************************************************************  
- *  GET SIGNAL MIN/MAX FUNCTIONS 
- ***************************************************************/
-
-
-//``````````````````````````````````````````````````````````` GET SIGNAL MIN FUNCTION ```````````````````````````````````````````````````````````//
-
-iSYSResult_t iSYS4001::iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, float *signal, uint8_t destAddress, uint32_t timeout)
-{
-
-    if (signal == NULL) return ERR_NULL_POINTER;
-
-
-    uint8_t command[11];
-    uint8_t index = 0;
-    command[index++] = 0x68;   
-    command[index++] = 0x05;
-    command[index++] = 0x05;
-    command[index++] = 0x68;
-    command[index++] = destAddress;
-    command[index++] = 0x01;
-    command[index++] = 0xD4;
-    command[index++] = outputnumber;
-    command[index++] = 0x0A;
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[index++] = fcs;
-    command[index++] = 0x16;
-
-    // Debug: print outbound frame
-    Serial.print("Sending GET Signal Min command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10) Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    _serial.write(command, sizeof(command));
-    _serial.flush();
-
-    uint8_t response[11];
-    uint32_t startTime = millis();
-    size_t minIndex = 0;
-
-    // Read response with timeout
-    while ((millis() - startTime) < timeout && minIndex < 11) {
-        if (_serial.available()) {
-            response[minIndex++] = _serial.read();
-            if (response[minIndex-1] == 0x16) break;
-        }
-    }
-
-    for (int i = 0; i < minIndex; i++) 
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10) Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    if (minIndex == 0) {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    }
-
-    if (minIndex < 11) {
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    }
-    // Validate response frame structure (do not enforce payload bytes)
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 || 
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
-        response[6] != 0xD4 || response[10] != 0x16) 
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-
-    if (minIndex == 11) {
-        uint8_t expectedFCS = calculateFCS(response, 4, 8);
-        if (response[9] != expectedFCS)
-        {
-            return ERR_INVALID_CHECKSUM;
-        }
-    }
-
-        uint16_t rawSignal = ((uint16_t)response[7] << 8) | (uint16_t)response[8];
-
-        *signal = (float)rawSignal / 10.0f;   // result in dB
-
-    
-    return ERR_OK;
-}
-
-
-//``````````````````````````````````````````````````````````` GET SIGNAL MAX FUNCTION ```````````````````````````````````````````````````````````//
-
-iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, float *signal, uint8_t destAddress, uint32_t timeout)
-{
-    if (signal == NULL) return ERR_NULL_POINTER;
-
-
-    uint8_t command[11];
-    uint8_t index = 0;
-    command[index++] = 0x68;   
-    command[index++] = 0x05;
-    command[index++] = 0x05;
-    command[index++] = 0x68;
-    command[index++] = destAddress;
-    command[index++] = 0x01;
-    command[index++] = 0xD4;
-    command[index++] = outputnumber;
-    command[index++] = 0x0B;
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[index++] = fcs;
-    command[index++] = 0x16;
-
-    // Debug: print outbound frame
-    Serial.print("Sending GET Signal Max command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10) Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    _serial.write(command, sizeof(command));
-    _serial.flush();
-
-    uint8_t response[11];
-    uint32_t startTime = millis();
-    size_t minIndex = 0;
-
-    // Read response with timeout
-    while ((millis() - startTime) < timeout && minIndex < 11) {
-        if (_serial.available()) {
-            response[minIndex++] = _serial.read();
-            if (response[minIndex-1] == 0x16) break;
-        }
-    }
-
-    for (int i = 0; i < minIndex; i++) 
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10) Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    if (minIndex == 0) {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    }
-
-    if (minIndex < 11) {
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    }
-    // Validate response frame structure (do not enforce payload bytes)
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 || 
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress || 
-        response[6] != 0xD4 || response[10] != 0x16) 
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-
-    if (minIndex == 11) {
-        uint8_t expectedFCS = calculateFCS(response, 4, 8);
-        if (response[9] != expectedFCS)
-        {
-            return ERR_INVALID_CHECKSUM;
-        }
-    }
-
-        uint16_t rawSignal = ((uint16_t)response[7] << 8) | (uint16_t)response[8];
-        *signal = (float)rawSignal / 10.0f;   // result in dB
     
     return ERR_OK;
 }
@@ -2866,3 +2524,21 @@ iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t 
     
     return ERR_COMMAND_NO_DATA_RECEIVED; // Timeout error - no response received
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
