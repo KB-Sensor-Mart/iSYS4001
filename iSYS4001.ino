@@ -1,131 +1,49 @@
 /*
-  iSYS4001 Velocity Configuration + Target List Demo
-  ---------------------------------------------------
-  This sketch runs on ESP32 and communicates with the InnoSenT iSYS4001 radar module
-  over UART2 (default pins: RX=16, TX=17).
-
-  Features:
-    - Configures minimum and maximum velocity thresholds (in km/h) for Output 1.
-    - Saves application settings to the radar.
-    - Continuously requests the target list and prints detected targets
-      (signal, velocity [m/s], range [m], angle [deg]) to Serial Monitor.
-
-  Notes:
-    - The iSYS4001 expects velocity values in km/h when using
-      iSYS_setOutputVelocityMin() and iSYS_setOutputVelocityMax().
-    - The target list velocity values are returned in meters per second (m/s).
+  ESP32 UART2 Raw Command Test for iSYS Radar
+  -------------------------------------------
+  - Sends a fixed 11-byte command frame to the radar via UART2 (pins RX=16, TX=17).
+  - Prints the transmitted bytes (TX) and received response (RX) in HEX format.
+  - Useful for debugging raw protocol without higher-level libraries.
 */
 
-#include "iSYS4001.h"
+#include <Arduino.h>
 
-// Use Serial2 (ESP32 default pins: RX=16, TX=17). Adjust if needed for your board.
-iSYS4001 radar(Serial2, 115200);
+// Use UART2 (pins 16 = RX, 17 = TX on ESP32)
+HardwareSerial RadarSerial(2);
 
-// Storage for decoded targets
-iSYSTargetList_t targetList;
-
-// Configuration
-const uint8_t DESTINATION_ADDRESS = 0x80;  // Radar device address
-const uint32_t TIMEOUT_MS = 300;           // Response timeout
-uint8_t SetminVelocityValue = 18;          // Minimum velocity threshold (km/h)
-uint8_t SetmaxVelocityValue = 217;         // Maximum velocity threshold (km/h)
+// Example command to send (11 bytes)
+uint8_t cmd[] = {0x68, 0x07, 0x07, 0x68, 0x80, 0x01, 0xD5, 0x10, 0x00, 0x00,0x02,0x5F,0x16};
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) { delay(10); }
-
-  // Initialize Serial2 explicitly with pins on ESP32
-  Serial2.begin(115200, SERIAL_8N1, 16, 17);
-
-  // Print configuration
-  Serial.print("Dest Addr: 0x"); Serial.println(DESTINATION_ADDRESS, HEX);
-  Serial.print("Timeout: "); Serial.print(TIMEOUT_MS); Serial.println(" ms");
-  Serial.println("Output: 1 (default)");
-
-  // Flush any stale bytes from radar UART
-  while (Serial2.available()) { Serial2.read(); }
-  delay(500);
-
-  // --- Set minimum velocity (km/h) ---
-  iSYSResult_t iSYS_setOutputVelocityMin = radar.iSYS_setOutputVelocityMin(
-    ISYS_OUTPUT_1, SetminVelocityValue, DESTINATION_ADDRESS, TIMEOUT_MS
-  );
-  if (iSYS_setOutputVelocityMin != ERR_OK) {
-    Serial.print("iSYS_setOutputVelocityMin failed: ");
-    Serial.println(iSYS_setOutputVelocityMin, HEX);
-  } else {
-    Serial.print("Minimum velocity set to: ");
-    Serial.print(SetminVelocityValue);
-    Serial.println(" km/h");
-  }
-
-  // --- Set maximum velocity (km/h) ---
-  iSYSResult_t iSYS_setOutputVelocityMax = radar.iSYS_setOutputVelocityMax(
-    ISYS_OUTPUT_1, SetmaxVelocityValue, DESTINATION_ADDRESS, TIMEOUT_MS
-  );
-  if (iSYS_setOutputVelocityMax != ERR_OK) {
-    Serial.print("iSYS_setOutputVelocityMax failed: ");
-    Serial.println(iSYS_setOutputVelocityMax, HEX);
-  } else {
-    Serial.print("Maximum velocity set to: ");
-    Serial.print(SetmaxVelocityValue);
-    Serial.println(" km/h");
-  }
-
-  // --- Save application settings ---
-  iSYSResult_t saveApplicationSettings = radar.saveApplicationSettings(
-    DESTINATION_ADDRESS, TIMEOUT_MS
-  );
-  if (saveApplicationSettings != ERR_OK) {
-    Serial.print("Failed to save application settings. Error: ");
-    Serial.println(saveApplicationSettings, HEX);
-  } else {
-    Serial.println("Application settings saved successfully.");
-  }
+  RadarSerial.begin(115200, SERIAL_8N1, 16, 17); // baud, config, RX, TX
+  Serial.println("Starting raw UART command test...");
 }
 
 void loop() {
-  Serial.println("\n--- Requesting Target List ---");
-
-  // Flush UART buffer
-  while (Serial2.available()) { Serial2.read(); }
-
-  // Request target list
-  iSYSResult_t res = radar.getTargetList32(
-    &targetList,
-    DESTINATION_ADDRESS,
-    TIMEOUT_MS
-  );
-
-  // Retry once if first attempt fails
-  if (res != ERR_OK) {
-    Serial.print("First attempt failed (code "); Serial.print(res); Serial.println(") - retrying once...");
-    res = radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS);
+  // --- Send Command ---
+  Serial.print("TX: ");
+  for (size_t i = 0; i < sizeof(cmd); i++) {
+    if (cmd[i] < 0x10) Serial.print("0");
+    Serial.print(cmd[i], HEX);
+    Serial.print(" ");
   }
+  Serial.println();
 
-  // Handle result
-  if (res == ERR_OK) {
-    if (targetList.error.iSYSTargetListError == TARGET_LIST_OK) {
-      Serial.print("Targets: ");
-      Serial.print(targetList.nrOfTargets);
-      Serial.print(", Output: ");
-      Serial.println(targetList.outputNumber);
+  RadarSerial.write(cmd, sizeof(cmd));
+  RadarSerial.flush(); // ensure bytes are sent
 
-      for (uint16_t i = 0; i < targetList.nrOfTargets && i < MAX_TARGETS; i++) {
-        Serial.print("#"); Serial.print(i + 1); Serial.println("");
-        Serial.print("  Signal: "); Serial.println(targetList.targets[i].signal);
-        Serial.print("  Velocity: "); Serial.print(targetList.targets[i].velocity); Serial.println(" m/s");
-        Serial.print("  Range: "); Serial.print(targetList.targets[i].range); Serial.println(" m");
-        Serial.print("  Angle: "); Serial.print(targetList.targets[i].angle); Serial.println(" deg");
-      }
-    } else {
-      Serial.print("Target list error code: ");
-      Serial.println(targetList.error.iSYSTargetListError);
+  // --- Receive Response ---
+  if (RadarSerial.available()) {
+    Serial.print("RX: ");
+    while (RadarSerial.available()) {
+      uint8_t b = RadarSerial.read();
+      if (b < 0x10) Serial.print("0");
+      Serial.print(b, HEX);
+      Serial.print(" ");
     }
-  } else {
-    Serial.print("Failed to get target list - error code: ");
-    Serial.println(res);
+    Serial.println();
   }
 
-  delay(300);
+  delay(100); // loop delay
 }
