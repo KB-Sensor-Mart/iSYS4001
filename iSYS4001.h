@@ -44,24 +44,15 @@ typedef enum iSYSTargetListError
     TARGET_LIST_ACQUISITION_NOT_STARTED     
 } iSYSTargetListError_t;
 
-typedef enum iSYSOutputNumber
-{
-    ISYS_OUTPUT_1     = 1,
-    ISYS_OUTPUT_2        ,
-    ISYS_OUTPUT_3
-} iSYSOutputNumber_t;
-
-// Output single target filter type (sub-function 0x15)
 typedef enum iSYSOutput_filter
 {
-    ISYS_SIGNAL = 0,
-    ISYS_MEAN           ,
-    ISYS_MEDIAN         ,
-    ISYS_MIN            ,
-    ISYS_MAX             
+    ISYS_OUTPUT_FILTER_HIGHEST_SIGNAL        = 0,
+    ISYS_OUTPUT_FILTER_MEAN                     ,
+    ISYS_OUTPUT_FILTER_MEDIAN                   ,
+    ISYS_OUTPUT_FILTER_MIN                      ,
+    ISYS_OUTPUT_FILTER_MAX                      
 } iSYSOutput_filter_t;
 
-// Output single target filter signal (sub-function 0x16)
 typedef enum iSYSFilter_signal
 {
     ISYS_OFF = 0,

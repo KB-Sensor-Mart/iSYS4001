@@ -30,8 +30,8 @@ void setup()
 
 	iSYSResult_t res;
 
-	// Set single target filter type to MIN on Output 1
-	res = radar.iSYS_setOutputFilter(ISYS_OUTPUT_1, ISYS_MAX, deviceAddress, timeout);
+	// Set single target filter type to Max on Output 1
+	res = radar.iSYS_setOutputFilter(ISYS_OUTPUT_1, ISYS_OUTPUT_FILTER_MAX, deviceAddress, timeout);
     if (res != ERR_OK) {
          Serial.print("iSYS_setOutputFilter failed: ");
   Serial.println(res, HEX);
