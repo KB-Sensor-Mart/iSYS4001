@@ -1,49 +1,155 @@
 /*
-  ESP32 UART2 Raw Command Test for iSYS Radar
-  -------------------------------------------
-  - Sends a fixed 11-byte command frame to the radar via UART2 (pins RX=16, TX=17).
-  - Prints the transmitted bytes (TX) and received response (RX) in HEX format.
-  - Useful for debugging raw protocol without higher-level libraries.
+  iSYS4001 Radar Sensor (Output Filter , Signal Filter )
+
+
+  This sketch demonstrates how to interface an ESP32 with the InnoSenT iSYS4001
+  radar sensor module using the provided iSYS4001 library.
+
+  Features:
+  - Initializes UART communication with the radar (Serial2 on ESP32).
+  - Configures the radar output filter (MAX) and signal filter (radial velocity).
+  - Saves all radar settings to non-volatile memory.
+  - Requests and prints the target list in real-time:
+      * Signal strength
+      * Radial velocity
+      * Range
+      * Angle
+  - Includes retry logic if the first target request fails.
+
+  Connections (default ESP32 pins):
+  - Radar TX → ESP32 RX (GPIO16)
+  - Radar RX → ESP32 TX (GPIO17)
+
 */
 
-#include <Arduino.h>
+#include "iSYS4001.h"
 
-// Use UART2 (pins 16 = RX, 17 = TX on ESP32)
-HardwareSerial RadarSerial(2);
+// -------------------- Objects & Config --------------------
+iSYS4001 radar(Serial2, 115200);       // Radar object on Serial2
+iSYSTargetList_t targetList;           // Storage for decoded targets
 
-// Example command to send (11 bytes)
-uint8_t cmd[] = {0x68, 0x07, 0x07, 0x68, 0x80, 0x01, 0xD5, 0x10, 0x00, 0x00,0x02,0x5F,0x16};
+const uint8_t deviceAddress = 0x80;    // Adjust if your radar uses a different address
+const uint32_t timeout = 300;          // Response timeout (ms)
 
+// -------------------- Setup --------------------
 void setup() {
   Serial.begin(115200);
-  RadarSerial.begin(115200, SERIAL_8N1, 16, 17); // baud, config, RX, TX
-  Serial.println("Starting raw UART command test...");
+  while (!Serial) { delay(10); } // Wait for serial monitor
+
+  // Start Serial2 (ESP32 pins RX=16, TX=17 by default)
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);
+
+  // Flush stale data from radar UART
+  while (Serial2.available()) { Serial2.read(); }
+  delay(500);
+
+  iSYSResult_t res;
+
+  // Configure radar filters
+  res = radar.iSYS_setOutputFilter(ISYS_OUTPUT_1, ISYS_OUTPUT_FILTER_MAX, deviceAddress, timeout);
+  if (res != ERR_OK) {
+    Serial.print("Filter setup failed: "); Serial.println(res, HEX);
+  } else {
+    Serial.println("Output filter set command OK.");
+  }
+
+  res = radar.iSYS_setOutputSignalFilter(ISYS_OUTPUT_1, ISYS_OFF, deviceAddress, timeout);
+  if (res != ERR_OK) {
+    Serial.print("Signal filter setup failed: "); Serial.println(res, HEX);
+  } else {
+    Serial.println("Output signal filter set command OK.");
+  }
+
+  // Read-back and display configured filters
+  iSYSOutput_filter_t currentOutFilter;
+  iSYSFilter_signal_t currentSignalFilter;
+
+  auto outputFilterToString = [](iSYSOutput_filter_t f) -> const char* {
+    switch (f) {
+      case ISYS_OUTPUT_FILTER_HIGHEST_SIGNAL: return "HIGHEST_SIGNAL";
+      case ISYS_OUTPUT_FILTER_MEAN:           return "MEAN";
+      case ISYS_OUTPUT_FILTER_MEDIAN:         return "MEDIAN";
+      case ISYS_OUTPUT_FILTER_MIN:            return "MIN";
+      case ISYS_OUTPUT_FILTER_MAX:            return "MAX";
+      default:                                return "UNKNOWN";
+    }
+  };
+
+  auto signalFilterToString = [](iSYSFilter_signal_t s) -> const char* {
+    switch (s) {
+      case ISYS_OFF:             return "OFF";
+      case ISYS_VELOCITY_RADIAL: return "VELOCITY_RADIAL";
+      case ISYS_RANGE_RADIAL:    return "RANGE_RADIAL";
+      default:                   return "UNKNOWN";
+    }
+  };
+
+  res = radar.iSYS_getOutputFilter(ISYS_OUTPUT_1, &currentOutFilter, deviceAddress, timeout);
+  if (res == ERR_OK) {
+    Serial.print("Output filter set to: ");
+    Serial.println(outputFilterToString(currentOutFilter));
+  } else {
+    Serial.print("Failed to read output filter: "); Serial.println(res, HEX);
+  }
+
+  res = radar.iSYS_getOutputSignalFilter(ISYS_OUTPUT_1, &currentSignalFilter, deviceAddress, timeout);
+  if (res == ERR_OK) {
+    Serial.print("Output signal filter set to: ");
+    Serial.println(signalFilterToString(currentSignalFilter));
+  } else {
+    Serial.print("Failed to read signal filter: "); Serial.println(res, HEX);
+  }
+
+  // Save settings
+  res = radar.saveAllSettings(deviceAddress, timeout);
+  if (res == ERR_OK) {
+    Serial.println("Settings saved successfully.");
+  } else {
+    Serial.print("Save settings failed: "); Serial.println(res, HEX);
+  }
 }
 
+// -------------------- Loop --------------------
 void loop() {
-  // --- Send Command ---
-  Serial.print("TX: ");
-  for (size_t i = 0; i < sizeof(cmd); i++) {
-    if (cmd[i] < 0x10) Serial.print("0");
-    Serial.print(cmd[i], HEX);
-    Serial.print(" ");
+  Serial.println("\n--- Requesting Target List ---");
+
+  // Clear stale data
+  while (Serial2.available()) { Serial2.read(); }
+
+  // Request target list
+  iSYSResult_t res = radar.getTargetList32(&targetList, deviceAddress, timeout);
+
+  // Retry once if it fails
+  if (res != ERR_OK) {
+    Serial.print("First attempt failed (code ");
+    Serial.print(res);
+    Serial.println("). Retrying...");
+    res = radar.getTargetList32(&targetList, deviceAddress, timeout);
   }
-  Serial.println();
 
-  RadarSerial.write(cmd, sizeof(cmd));
-  RadarSerial.flush(); // ensure bytes are sent
+  // Process result
+  if (res == ERR_OK) {
+    if (targetList.error.iSYSTargetListError == TARGET_LIST_OK) {
+      Serial.print("Targets: ");
+      Serial.print(targetList.nrOfTargets);
+      Serial.print(" | Output: ");
+      Serial.println(targetList.outputNumber);
 
-  // --- Receive Response ---
-  if (RadarSerial.available()) {
-    Serial.print("RX: ");
-    while (RadarSerial.available()) {
-      uint8_t b = RadarSerial.read();
-      if (b < 0x10) Serial.print("0");
-      Serial.print(b, HEX);
-      Serial.print(" ");
+      for (uint16_t i = 0; i < targetList.nrOfTargets && i < MAX_TARGETS; i++) {
+        Serial.print("Target #"); Serial.println(i + 1);
+        Serial.print("  Signal:   "); Serial.println(targetList.targets[i].signal);
+        Serial.print("  Velocity: "); Serial.print(targetList.targets[i].velocity); Serial.println(" m/s");
+        Serial.print("  Range:    "); Serial.print(targetList.targets[i].range); Serial.println(" m");
+        Serial.print("  Angle:    "); Serial.print(targetList.targets[i].angle); Serial.println(" deg");
+      }
+    } else {
+      Serial.print("Target list error: ");
+      Serial.println(targetList.error.iSYSTargetListError);
     }
-    Serial.println();
+  } else {
+    Serial.print("Failed to get target list - error: ");
+    Serial.println(res);
   }
 
-  delay(100); // loop delay
+  delay(300); // Polling interval
 }

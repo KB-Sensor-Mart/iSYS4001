@@ -60,7 +60,7 @@ typedef enum iSYSFilter_signal
     ISYS_RANGE_RADIAL
 } iSYSFilter_signal_t;
 
-// Missing from this header: output number enum used across API
+
 typedef enum iSYSOutputNumber
 {
     ISYS_OUTPUT_1 = 1,
@@ -68,7 +68,7 @@ typedef enum iSYSOutputNumber
     ISYS_OUTPUT_3
 } iSYSOutputNumber_t;
 
-// EEPROM sub-function codes for saving settings
+
 typedef enum iSYSEEPROMSubFunction
 {
     ISYS_EEPROM_SET_FACTORY_SETTINGS        = 0x01,    // Restore factory default settings
