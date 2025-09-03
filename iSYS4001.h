@@ -15,25 +15,31 @@
  * @note Based on iSYS protocol specification with timeout recommendations:
  *       - iSYS-400x: 75ms cycle time, 100ms minimum timeout
  */
-typedef enum iSYSResult
+typedef enum
 {
-    // ===== SUCCESS CODES =====
-    ERR_OK                                  = 0x0000,   // (0)
-     
-    // ===== RESPONSE RECEPTION ERRORS =====
-    ERR_COMMAND_NO_DATA_RECEIVED            = 0x0001,   // (1)
-    ERR_COMMAND_NO_VALID_FRAME_FOUND        = 0x0002,   // (2)
-    ERR_COMMAND_RX_FRAME_DAMAGED            = 0x0003,   // (3)
-    ERR_COMMAND_RX_FRAME_LENGTH             = 0x0004,   // (4)
-    ERR_INVALID_CHECKSUM                    = 0x0005,   // (5)
-    ERR_NULL_POINTER                        = 0x0006,   // (6)
-    ERR_PARAMETER_OUT_OF_RANGE              = 0x0007,   // (7)
-    ERR_OUTPUT_OUT_OF_RANGE                 = 0x0008,   // (8)
-    ERR_TIMEOUT                             = 0x0009,    // (9)
-    ERR_COMMAND_MAX_DATA_OVERFLOW           = 0x0010,   // (10)
-    ERR_COMMAND_FAILURE                     = 0x0011   // (11)
+    // ===== SUCCESS =====
+    OK                          = 0,
+
+    // ===== GENERIC ERRORS =====
+    ERR_NULL_POINTER            = 1,
+    ERR_PARAMETER_OUT_OF_RANGE  = 2,
+    ERR_OUTPUT_OUT_OF_RANGE     = 3,
+    ERR_TIMEOUT                 = 4,
+
+    // ===== FRAME/COMMUNICATION ERRORS =====
+    ERR_NO_DATA_RECEIVED        = 5,
+    ERR_NO_VALID_FRAME_FOUND    = 6,
+    ERR_FRAME_DAMAGED           = 7,
+    ERR_FRAME_LENGTH            = 8,
+    ERR_INVALID_CHECKSUM        = 9,
+    ERR_MAX_DATA_OVERFLOW       = 10,
+    ERR_FRAME_INCOMPLETE        = 11,
+
+    // ===== COMMAND ERRORS =====
+    ERR_COMMAND_FAILURE         = 12
 
 } iSYSResult_t;
+
 
 typedef enum iSYSTargetListError
 {
@@ -118,7 +124,8 @@ public:
 /***************************************************************  
  *  GET TARGET LIST FUNCTION  
  ***************************************************************/
-
+    iSYSResult_t getTargetList(iSYSTargetList_t *pTargetList,uint8_t destAddress,uint32_t timeout,iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
+    iSYSResult_t getTargetList16(iSYSTargetList_t *pTargetList,uint8_t destAddress,uint32_t timeout,iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
     iSYSResult_t getTargetList32(iSYSTargetList_t *pTargetList,uint8_t destAddress,uint32_t timeout,iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
 
 
@@ -201,8 +208,8 @@ private:
  ***************************************************************/
    
     iSYSResult_t decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements,uint16_t productcode, uint8_t bitrate,iSYSTargetList_t *targetList);
-    iSYSResult_t sendTargetListRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
-    iSYSResult_t receiveTargetListResponse(iSYSTargetList_t *pTargetList, uint32_t timeout);
+    iSYSResult_t sendTargetListRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress, uint8_t bitrate);
+    iSYSResult_t receiveTargetListResponse(iSYSTargetList_t *pTargetList, uint32_t timeout, uint8_t bitrate);
     iSYSResult_t decodeTargetList(const uint8_t* data, uint16_t length, iSYSTargetList_t *pTargetList);
 
 
