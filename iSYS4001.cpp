@@ -5,7 +5,6 @@ iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
 {
 }
 
-
 /***************************************************************
  *  GET TARGET LIST FUNCTIONS
  ***************************************************************/
@@ -36,16 +35,13 @@ iSYSResult_t iSYS4001::getTargetList32(iSYSTargetList_t *pTargetList, uint8_t de
     return ERR_OK;
 }
 
-
 //``````````````````````````````````````````````````````````` SEND TARGET LIST REQUEST```````````````````````````````````````````````````````````//
 
 iSYSResult_t iSYS4001::sendTargetListRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress, uint8_t bitrate)
 {
 
-
     uint8_t command[11];
     uint8_t index = 0;
-
 
     command[index++] = 0x68;
     command[index++] = 0x05;
@@ -74,12 +70,10 @@ iSYSResult_t iSYS4001::sendTargetListRequest(iSYSOutputNumber_t outputnumber, ui
     }
     Serial.println();
 
-
     _serial.write(command, 11);
     _serial.flush();
     return ERR_OK;
 }
-
 
 //``````````````````````````````````````````````````````````` RECEIVE AND PROCESS TARGET LIST ```````````````````````````````````````````````````````````//
 iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, uint32_t timeout, uint8_t bitrate)
@@ -88,8 +82,8 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
     std::vector<uint8_t> buffer;
 
     // Determine header length and index where number-of-targets lives
-    const uint8_t headerLen   = (bitrate == 32) ? 6 : 9; // 0-based: need 6 bytes to read index 5, 9 for index 8
-    const uint8_t countIndex  = (bitrate == 32) ? 5 : 8; // 6th index for 32-bit, 9th index for 16-bit
+    const uint8_t headerLen = (bitrate == 32) ? 6 : 9;  // 0-based: need 6 bytes to read index 5, 9 for index 8
+    const uint8_t countIndex = (bitrate == 32) ? 5 : 8; // 6th index for 32-bit, 9th index for 16-bit
     const uint8_t bytesPerTgt = (bitrate == 32) ? 14 : 7;
 
     // Read header first
@@ -105,13 +99,11 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-
     uint8_t nrOfTargets = buffer[countIndex];
     if (nrOfTargets > MAX_TARGETS && nrOfTargets != 0xFF)
     {
         return ERR_COMMAND_MAX_DATA_OVERFLOW;
     }
-
 
     const uint16_t expectedLength = headerLen + (bytesPerTgt * nrOfTargets) + 2;
     buffer.reserve(expectedLength);
@@ -129,12 +121,10 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
         return ERR_FRAME_INCOMPLETE;
     }
 
-
     if (buffer.back() != 0x16)
     {
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
-
 
     Serial.print("Received response from radar: ");
     for (size_t i = 0; i < buffer.size(); i++)
@@ -143,13 +133,12 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
     }
     Serial.println();
 
-    return decodeTargetFrame(buffer.data(), buffer.size(), 4001, bitrate, pTargetList);
+    return decodeTargetFrame(buffer.data(), buffer.size(), bitrate, pTargetList);
 }
-
 
 //``````````````````````````````````````````````````````````` DECODE TARGET FRAME ```````````````````````````````````````````````````````````//
 
-iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements,uint16_t productcode, uint8_t bitrate, iSYSTargetList_t *targetList)
+iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements, uint8_t bitrate, iSYSTargetList_t *targetList)
 {
     uint16_t ui16_fc;
     uint8_t output_number;
@@ -172,10 +161,9 @@ iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElem
     pData = &frame_array[ui16_fc + 3];
 
     if (frame_array[nrOfElements - 1] != 0x16)
-    { 
+    {
         return ERR_COMMAND_NO_VALID_FRAME_FOUND;
     }
-
 
     if ((nrOfTargets > MAX_TARGETS) && (nrOfTargets != 0xff))
     {
@@ -228,22 +216,12 @@ iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElem
             for (i = 0; i < nrOfTargets; i++)
             {
                 targetList->targets[i].signal = (float)((*pData++) & 0x00ff);
-
                 tmp = (((*pData++) & 0x00ff) << 8);
                 tmp |= ((*pData++) & 0x00ff);
                 targetList->targets[i].velocity = (float)tmp * 0.01f;
-
                 tmp = (((*pData++) & 0x00ff) << 8);
                 tmp |= ((*pData++) & 0x00ff);
-                if (productcode == 4004 || productcode == 6003)
-                {
-                    targetList->targets[i].range = (float)tmp * 0.001f;
-                }
-                else
-                {
                     targetList->targets[i].range = (float)tmp * 0.01f;
-                }
-
                 tmp = (((*pData++) & 0x00ff) << 8);
                 tmp |= ((*pData++) & 0x00ff);
                 targetList->targets[i].angle = (float)tmp * 0.01f;

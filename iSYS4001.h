@@ -18,25 +18,25 @@
 typedef enum
 {
     // ===== SUCCESS =====
-    OK                          = 0,
+    ERR_OK                               = 0,
 
     // ===== GENERIC ERRORS =====
-    ERR_NULL_POINTER            = 1,
-    ERR_PARAMETER_OUT_OF_RANGE  = 2,
-    ERR_OUTPUT_OUT_OF_RANGE     = 3,
-    ERR_TIMEOUT                 = 4,
+    ERR_NULL_POINTER                     = 1,
+    ERR_PARAMETER_OUT_OF_RANGE           = 2,
+    ERR_OUTPUT_OUT_OF_RANGE              = 3,
+    ERR_TIMEOUT                          = 4,
 
     // ===== FRAME/COMMUNICATION ERRORS =====
-    ERR_NO_DATA_RECEIVED        = 5,
-    ERR_NO_VALID_FRAME_FOUND    = 6,
-    ERR_FRAME_DAMAGED           = 7,
-    ERR_FRAME_LENGTH            = 8,
-    ERR_INVALID_CHECKSUM        = 9,
-    ERR_MAX_DATA_OVERFLOW       = 10,
-    ERR_FRAME_INCOMPLETE        = 11,
+    ERR_COMMAND_NO_DATA_RECEIVED         = 5,
+    ERR_COMMAND_NO_VALID_FRAME_FOUND     = 6,
+    ERR_COMMAND_RX_FRAME_DAMAGED         = 7,
+    ERR_COMMAND_RX_FRAME_LENGTH          = 8,
+    ERR_INVALID_CHECKSUM                 = 9,
+    ERR_COMMAND_MAX_DATA_OVERFLOW        = 10,
+    ERR_FRAME_INCOMPLETE                 = 11,
 
     // ===== COMMAND ERRORS =====
-    ERR_COMMAND_FAILURE         = 12
+    ERR_COMMAND_FAILURE                  = 12
 
 } iSYSResult_t;
 
@@ -207,7 +207,7 @@ private:
  *  HELPER FUNCTIONS FOR COMMUNICATION AND DECODING  
  ***************************************************************/
    
-    iSYSResult_t decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements,uint16_t productcode, uint8_t bitrate,iSYSTargetList_t *targetList);
+    iSYSResult_t decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements, uint8_t bitrate, iSYSTargetList_t *targetList);
     iSYSResult_t sendTargetListRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress, uint8_t bitrate);
     iSYSResult_t receiveTargetListResponse(iSYSTargetList_t *pTargetList, uint32_t timeout, uint8_t bitrate);
     iSYSResult_t decodeTargetList(const uint8_t* data, uint16_t length, iSYSTargetList_t *pTargetList);
