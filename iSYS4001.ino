@@ -1,108 +1,120 @@
-/*
-  iSYS4001 Radar Sensor (Get Target List)
-  
-  --------------------------------------------------------
-  This sketch demonstrates how to request and display the target list
-  from the iSYS4001 radar module using an ESP32.
-
-  Features:
-    - Initializes communication with iSYS4001 over Serial2 (pins RX=16, TX=17).
-    - Continuously requests the target list from radar.
-    - Prints detected targets with details:
-        * Signal strength
-        * Velocity (m/s)
-        * Range (m)
-        * Angle (degrees)
-    - Retries once if the radar does not respond within the timeout.
-    - Cleans stale UART data before each request for stability.
-
-  Hardware:
-    - ESP32 board
-    - iSYS4001 radar module connected via UART2
-        ESP32 Pin 16 (RX) ←→ Radar TX
-        ESP32 Pin 17 (TX) ←→ Radar RX
-        GND shared between ESP32 and radar
-
-  Notes:
-    - DESTINATION_ADDRESS may need to be adjusted depending on radar setup.
-    - TIMEOUT_MS defines how long to wait for a response.
-    - By default, the library requests data from Output 1 (ISYS_OUTPUT_1).
-      To use Output 2 or others, specify it in getTargetList32().
-
-*/
-
+/********************************************************************************************
+ * iSYS4001 Threshold Minimum Demo
+ * ------------------------------------------------------------------------------------------
+ * This example demonstrates how to set and read back the "threshold minimum" parameter
+ * on an InnoSenT iSYS4001 radar sensor using a custom driver class.
+ *
+ * Hardware:
+ *   - Tested with ESP32 (default Serial2 pins: RX=16, TX=17)
+ *   - iSYS4001 radar sensor connected via UART (115200 baud, 8N1)
+ *
+ * Functionality:
+ *   1. Initializes Serial2 for communication with the radar.
+ *   2. Sends a command to set the threshold minimum to -26 dB.
+ *   3. Reads back the threshold minimum from the sensor to verify.
+ *   4. Periodically polls the threshold every 5 seconds and prints the value.
+ *
+ * Configuration:
+ *   - DESTINATION_ADDRESS: The radar's address (default 0x80).
+ *   - TIMEOUT_MS: Maximum wait time for responses (default 300 ms).
+ *   - RX_PIN / TX_PIN: ESP32 pins used for Serial2.
+ *
+ * Notes:
+ *   - Ensure your radar is wired correctly to Serial2 pins.
+ *   - Change DESTINATION_ADDRESS if your radar uses a different address.
+ *   - Uncomment "saveAllSettings()" block if you want to persist changes to EEPROM
+ ********************************************************************************************/
 #include "iSYS4001.h"
 
-// Radar object using Serial2
+// Create radar object on Serial2 at 115200 baud
 iSYS4001 radar(Serial2, 115200);
 
-// Storage for decoded targets
-iSYSTargetList_t targetList;
-
 // Configuration
-const uint8_t DESTINATION_ADDRESS = 0x80;   // Adjust per your device config
-const uint32_t TIMEOUT_MS = 300;            // Response timeout (ms)
+constexpr uint8_t DESTINATION_ADDRESS = 0x80; // Adjust to your sensor address
+constexpr uint32_t TIMEOUT_MS = 300;          // Response timeout (ms)
+constexpr int RX_PIN = 16;
+constexpr int TX_PIN = 17;
 
-// ---------------------- Helper Functions ---------------------- //
-void flushSerial2() {
-  while (Serial2.available()) { Serial2.read(); }
+static void printResult(const char *label, iSYSResult_t res)
+{
+  Serial.print(label);
+  Serial.print(": ");
+  Serial.println(res);
 }
 
-void printTargetList() {
-  iSYSResult_t res = radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS);
-
-  // Retry once if the first attempt fails
-  if (res != ERR_OK) {
-    Serial.print("First attempt failed (code ");
-    Serial.print(res);
-    Serial.println(") - retrying...");
-    res = radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS);
-  }
-
-  if (res == ERR_OK) {
-    if (targetList.error.iSYSTargetListError == TARGET_LIST_OK) {
-      Serial.print("Targets: ");
-      Serial.print(targetList.nrOfTargets);
-      Serial.print(", Output: ");
-      Serial.println(targetList.outputNumber);
-
-      for (uint16_t i = 0; i < targetList.nrOfTargets && i < MAX_TARGETS; i++) {
-        Serial.printf("Target #%u\n", i + 1);
-        Serial.printf("  Signal: %.2f dB\n", targetList.targets[i].signal);
-        Serial.printf("  Velocity: %.2f m/s\n", targetList.targets[i].velocity);
-        Serial.printf("  Range: %.2f m\n", targetList.targets[i].range);
-        Serial.printf("  Angle: %.2f deg\n", targetList.targets[i].angle);
-      }
-    } else {
-      Serial.print("Target list error code: ");
-      Serial.println(targetList.error.iSYSTargetListError);
-    }
-  } else {
-    Serial.print("Failed to get target list - error code: ");
-    Serial.println(res);
-  }
-}
-
-// ---------------------- Arduino Setup & Loop ---------------------- //
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  while (!Serial) { delay(10); }
+  while (!Serial)
+  {
+    delay(10);
+  }
 
-  // Initialize Serial2 for radar
-  Serial2.begin(115200, SERIAL_8N1, 16, 17);
+  // Initialize Serial2 (ESP32 default: RX=16, TX=17)
+  Serial2.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
 
-  Serial.println("\n--- Radar Initialization ---");
-  Serial.printf("Dest Addr: 0x%X\n", DESTINATION_ADDRESS);
-  Serial.printf("Timeout: %lu ms\n", TIMEOUT_MS);
-  Serial.println("Output: 1 (default)");
+  // Clear any stale bytes
+  while (Serial2.available())
+  {
+    Serial2.read();
+  }
+  delay(300);
 
-  flushSerial2();
-  delay(100);
+  Serial.println("\n=== iSYS4001 Threshold Min Demo ===");
+
+  // Set threshold min to -26 dB
+  // int16_t setValue = -26;
+  // iSYSResult_t r = radar.iSYS_setThresholdMin(setValue, DESTINATION_ADDRESS, TIMEOUT_MS);
+  // if (r != ERR_OK) {
+  // 	Serial.print("SET threshold min failed: ");
+  // 	Serial.println(r);
+  // } else {
+  // 	Serial.print("SET threshold min OK (");
+  // 	Serial.print(setValue);
+  // 	Serial.println(" dB)");
+  // }
+
+  // Read back and print (value is returned in dB)
+  int16_t readBack = 0;
+  iSYSResult_t r = radar.iSYS_getThresholdMin(&readBack, DESTINATION_ADDRESS, TIMEOUT_MS);
+  if (r != ERR_OK)
+  {
+    Serial.print("GET threshold min failed: ");
+    Serial.println(r);
+  }
+  else
+  {
+    Serial.print("GET threshold min = ");
+    Serial.print(readBack);
+    Serial.println(" dB");
+  }
+
+  // Example (only if implemented in your class)
+  Serial.println("Example: Save all settings");
+  iSYSResult_t result = radar.saveAllSettings(DESTINATION_ADDRESS, TIMEOUT_MS);
+  printResult("Save all settings", result);
+  delay(2000);
 }
 
-void loop() {
-  Serial.println("\n--- Requesting Target List ---");
-  flushSerial2();
-  printTargetList();
-  delay(500);
+void loop()
+{
+  // Optionally poll the threshold every 5 seconds
+  static uint32_t last = 0;
+  if (millis() - last > 5000)
+  {
+    last = millis();
+    int16_t value = 0;
+    iSYSResult_t r = radar.iSYS_getThresholdMin(&value, DESTINATION_ADDRESS, TIMEOUT_MS);
+    if (r == ERR_OK)
+    {
+      Serial.print("Threshold min: ");
+      Serial.print(value);
+      Serial.println(" dB");
+    }
+    else
+    {
+      Serial.print("Read error: ");
+      Serial.println(r);
+    }
+  }
 }

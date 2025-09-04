@@ -221,7 +221,7 @@ iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElem
                 targetList->targets[i].velocity = (float)tmp * 0.01f;
                 tmp = (((*pData++) & 0x00ff) << 8);
                 tmp |= ((*pData++) & 0x00ff);
-                    targetList->targets[i].range = (float)tmp * 0.01f;
+                targetList->targets[i].range = (float)tmp * 0.01f;
                 tmp = (((*pData++) & 0x00ff) << 8);
                 tmp |= ((*pData++) & 0x00ff);
                 targetList->targets[i].angle = (float)tmp * 0.01f;
@@ -522,20 +522,19 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, f
 
     uint8_t response[11];
     uint32_t startTime = millis();
-    size_t responseIndex = 0;
-
-    while ((millis() - startTime) < timeout && responseIndex < 11)
+    uint8_t rIdx = 0;
+    while ((millis() - startTime) < timeout && rIdx < 11)
     {
         if (_serial.available())
         {
-            response[responseIndex++] = _serial.read();
-            if (response[responseIndex - 1] == 0x16)
+            response[rIdx++] = _serial.read();
+            if (response[rIdx - 1] == 0x16)
                 break;
         }
     }
 
     Serial.print("Received Range Min response: ");
-    for (int i = 0; i < responseIndex; i++)
+    for (int i = 0; i < (int)rIdx; i++)
     {
         Serial.print("0x");
         if (response[i] < 0x10)
@@ -545,12 +544,12 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, f
     }
     Serial.println();
 
-    if (responseIndex == 0)
+    if (rIdx == 0)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (responseIndex < 11)
+    if (rIdx < 11)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -626,20 +625,19 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, f
 
     uint8_t response[11];
     uint32_t startTime = millis();
-    size_t responseIndex = 0;
-
-    while ((millis() - startTime) < timeout && responseIndex < 11)
+    uint8_t rIdx = 0;
+    while ((millis() - startTime) < timeout && rIdx < 11)
     {
         if (_serial.available())
         {
-            response[responseIndex++] = _serial.read();
-            if (response[responseIndex - 1] == 0x16)
+            response[rIdx++] = _serial.read();
+            if (response[rIdx - 1] == 0x16)
                 break;
         }
     }
 
     Serial.print("Received Range Max response: ");
-    for (int i = 0; i < responseIndex; i++)
+    for (int i = 0; i < (int)rIdx; i++)
     {
         Serial.print("0x");
         if (response[i] < 0x10)
@@ -649,12 +647,12 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, f
     }
     Serial.println();
 
-    if (responseIndex == 0)
+    if (rIdx == 0)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (responseIndex < 11)
+    if (rIdx < 11)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -943,19 +941,19 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber
 
     uint8_t response[11];
     uint32_t startTime = millis();
-    size_t minIndex = 0;
-
-    while ((millis() - startTime) < timeout && minIndex < 11)
+    uint8_t rIdx = 0;
+    while ((millis() - startTime) < timeout && rIdx < 11)
     {
         if (_serial.available())
         {
-            response[minIndex++] = _serial.read();
-            if (response[minIndex - 1] == 0x16)
+            response[rIdx++] = _serial.read();
+            if (response[rIdx - 1] == 0x16)
                 break;
         }
     }
 
-    for (int i = 0; i < minIndex; i++)
+    Serial.print("Received Velocity min response: ");
+    for (int i = 0; i < (int)rIdx; i++)
     {
         Serial.print("0x");
         if (response[i] < 0x10)
@@ -965,12 +963,12 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber
     }
     Serial.println();
 
-    if (minIndex == 0)
+    if (rIdx == 0)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (minIndex < 11)
+    if (rIdx < 11)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -982,7 +980,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
 
-    if (minIndex == 11)
+    if (rIdx == 11)
     {
         uint8_t expectedFCS = calculateFCS(response, 4, 8);
         if (response[9] != expectedFCS)
@@ -1035,19 +1033,19 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber
 
     uint8_t response[11];
     uint32_t startTime = millis();
-    size_t maxIndex = 0;
-
-    while ((millis() - startTime) < timeout && maxIndex < 11)
+    uint8_t rIdx = 0;
+    while ((millis() - startTime) < timeout && rIdx < 11)
     {
         if (_serial.available())
         {
-            response[maxIndex++] = _serial.read();
-            if (response[maxIndex - 1] == 0x16)
+            response[rIdx++] = _serial.read();
+            if (response[rIdx - 1] == 0x16)
                 break;
         }
     }
 
-    for (int i = 0; i < maxIndex; i++)
+    Serial.print("Received Velocity max response: ");
+    for (int i = 0; i < (int)rIdx; i++)
     {
         Serial.print("0x");
         if (response[i] < 0x10)
@@ -1057,12 +1055,12 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber
     }
     Serial.println();
 
-    if (maxIndex == 0)
+    if (rIdx == 0)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (maxIndex < 11)
+    if (rIdx < 11)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -1074,7 +1072,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
 
-    if (maxIndex == 11)
+    if (rIdx == 11)
     {
         uint8_t expectedFCS = calculateFCS(response, 4, 8);
         if (response[9] != expectedFCS)
@@ -1355,19 +1353,19 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, 
 
     uint8_t response[11];
     uint32_t startTime = millis();
-    size_t minIndex = 0;
-
-    while ((millis() - startTime) < timeout && minIndex < 11)
+    uint8_t rIdx = 0;
+    while ((millis() - startTime) < timeout && rIdx < 11)
     {
         if (_serial.available())
         {
-            response[minIndex++] = _serial.read();
-            if (response[minIndex - 1] == 0x16)
+            response[rIdx++] = _serial.read();
+            if (response[rIdx - 1] == 0x16)
                 break;
         }
     }
 
-    for (int i = 0; i < minIndex; i++)
+    Serial.print("Received Signal Min response: ");
+    for (int i = 0; i < (int)rIdx; i++)
     {
         Serial.print("0x");
         if (response[i] < 0x10)
@@ -1377,12 +1375,12 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, 
     }
     Serial.println();
 
-    if (minIndex == 0)
+    if (rIdx == 0)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (minIndex < 11)
+    if (rIdx < 11)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -1394,7 +1392,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, 
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
 
-    if (minIndex == 11)
+    if (rIdx == 11)
     {
         uint8_t expectedFCS = calculateFCS(response, 4, 8);
         if (response[9] != expectedFCS)
@@ -1448,19 +1446,19 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, 
 
     uint8_t response[11];
     uint32_t startTime = millis();
-    size_t minIndex = 0;
-
-    while ((millis() - startTime) < timeout && minIndex < 11)
+    uint8_t rIdx = 0;
+    while ((millis() - startTime) < timeout && rIdx < 11)
     {
         if (_serial.available())
         {
-            response[minIndex++] = _serial.read();
-            if (response[minIndex - 1] == 0x16)
+            response[rIdx++] = _serial.read();
+            if (response[rIdx - 1] == 0x16)
                 break;
         }
     }
 
-    for (int i = 0; i < minIndex; i++)
+    Serial.print("Received Signal Max response: ");
+    for (int i = 0; i < (int)rIdx; i++)
     {
         Serial.print("0x");
         if (response[i] < 0x10)
@@ -1470,12 +1468,12 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, 
     }
     Serial.println();
 
-    if (minIndex == 0)
+    if (rIdx == 0)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (minIndex < 11)
+    if (rIdx < 11)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -1487,7 +1485,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, 
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
 
-    if (minIndex == 11)
+    if (rIdx == 11)
     {
         uint8_t expectedFCS = calculateFCS(response, 4, 8);
         if (response[9] != expectedFCS)
@@ -1642,19 +1640,19 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
 
     uint8_t response[11];
     uint32_t startTime = millis();
-    size_t maxIndex = 0;
-
-    while ((millis() - startTime) < timeout && maxIndex < 11)
+    uint8_t rIdx = 0;
+    while ((millis() - startTime) < timeout && rIdx < 11)
     {
         if (_serial.available())
         {
-            response[maxIndex++] = _serial.read();
-            if (response[maxIndex - 1] == 0x16)
+            response[rIdx++] = _serial.read();
+            if (response[rIdx - 1] == 0x16)
                 break;
         }
     }
 
-    for (int i = 0; i < maxIndex; i++)
+    Serial.print("Received Direction response: ");
+    for (int i = 0; i < (int)rIdx; i++)
     {
         Serial.print("0x");
         if (response[i] < 0x10)
@@ -1664,12 +1662,12 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
     }
     Serial.println();
 
-    if (maxIndex == 0)
+    if (rIdx == 0)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (maxIndex < 11)
+    if (rIdx < 11)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -1683,7 +1681,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
 
     *direction = (iSYSDirection_type_t)response[8];
 
-    if (maxIndex == 11)
+    if (rIdx == 11)
     {
         uint8_t expectedFCS = calculateFCS(response, 4, 8);
         if (response[9] != expectedFCS)
@@ -2755,4 +2753,211 @@ iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t 
     }
 
     return ERR_COMMAND_NO_DATA_RECEIVED;
+}
+
+/***************************************************************
+ *  SET/GET THRESHOLD MIN FUNCTIONS
+ ***************************************************************/
+
+// Set Threshold Minimum (in dB, valid range: -30 .. +30)
+iSYSResult_t iSYS4001::iSYS_setThresholdMin(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
+    if (sensitivity < -30 || sensitivity > 30)
+    {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+
+    // Convert dB to 0.1 dB units (multiply by 10)
+    sint16_t scaledValue = sensitivity * 10;
+
+    uint8_t command[13];
+    uint8_t index = 0;
+
+    command[index++] = 0x68;
+    command[index++] = 0x07;
+    command[index++] = 0x07;
+    command[index++] = 0x68;
+    command[index++] = destAddress;
+    command[index++] = 0x01;
+    command[index++] = 0xD3;                                 // Function code: write threshold
+    command[index++] = 0x00;                                 // Sub-function MSB
+    command[index++] = 0x0B;                                 // Sub-function LSB (threshold minimum)
+    command[index++] = (uint8_t)((scaledValue >> 8) & 0xFF); // value high byte (sint16)
+    command[index++] = (uint8_t)(scaledValue & 0xFF);        // value low byte
+
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    command[index++] = fcs;
+    command[index++] = 0x16;
+
+    Serial.print("Sending SET Threshold Min command: ");
+    for (int i = 0; i < 13; i++)
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10)
+            Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    _serial.write(command, 13);
+    _serial.flush();
+
+    // Expect 9-byte acknowledgement
+    uint8_t response[9];
+    uint32_t startTime = millis();
+    size_t idx = 0;
+    while ((millis() - startTime) < timeout && idx < 9)
+    {
+        if (_serial.available())
+        {
+            response[idx++] = _serial.read();
+            if (response[idx - 1] == 0x16)
+                break;
+        }
+    }
+
+    for (int i = 0; i < (int)idx; i++)
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10)
+            Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    if (idx == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    if (idx < 9)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD3 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    uint8_t expectedFCS = calculateFCS(response, 4, 6);
+    if (response[7] != expectedFCS)
+    {
+        return ERR_INVALID_CHECKSUM;
+    }
+
+    return ERR_OK;
+}
+
+// Get Threshold Minimum (returns value in dB via pointer)
+iSYSResult_t iSYS4001::iSYS_getThresholdMin(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout)
+{
+    if (sensitivity == NULL)
+    {
+        return ERR_NULL_POINTER;
+    }
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
+    uint8_t command[11];
+    uint8_t index = 0;
+
+    command[index++] = 0x68;
+    command[index++] = 0x05;
+    command[index++] = 0x05;
+    command[index++] = 0x68;
+    command[index++] = destAddress;
+    command[index++] = 0x01;
+    command[index++] = 0xD2; // Function code: read threshold
+    command[index++] = 0x00; // Sub-function MSB
+    command[index++] = 0x0B; // Sub-function LSB (threshold minimum)
+
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[index++] = fcs;
+    command[index++] = 0x16;
+
+    Serial.print("Sending GET Threshold Min command: ");
+    for (int i = 0; i < 11; i++)
+    {
+        Serial.print("0x");
+        if (command[i] < 0x10)
+            Serial.print("0");
+        Serial.print(command[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    _serial.write(command, 11);
+    _serial.flush();
+
+    uint8_t response[11];
+    uint32_t startTime = millis();
+    uint8_t rIdx = 0;
+    while ((millis() - startTime) < timeout && rIdx < 11)
+    {
+        if (_serial.available())
+        {
+            response[rIdx++] = _serial.read();
+            if (response[rIdx - 1] == 0x16)
+                break;
+        }
+    }
+
+    Serial.print("Received Threshold Min response: ");
+    for (int i = 0; i < (int)rIdx; i++)
+    {
+        Serial.print("0x");
+        if (response[i] < 0x10)
+            Serial.print("0");
+        Serial.print(response[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+
+    if (rIdx == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+    if (rIdx < 11)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD2 || response[10] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    uint8_t expected = calculateFCS(response, 4, 8);
+    if (response[9] != expected)
+    {
+        return ERR_INVALID_CHECKSUM;
+    }
+
+    // Parse signed 16-bit value (0.1 dB units) and convert to dB
+    int16_t raw = (int16_t)(((uint16_t)response[7] << 8) | (uint16_t)response[8]);
+    // Use proper rounding instead of truncation for 0.1 dB resolution
+    // Integer-based rounding: add 5 (half of 10) before division for proper rounding
+    if (raw >= 0)
+    {
+        *sensitivity = (raw + 5) / 10; // Round up for positive values
+    }
+    else
+    {
+        *sensitivity = (raw - 5) / 10; // Round down for negative values
+    }
+
+    return ERR_OK;
 }
