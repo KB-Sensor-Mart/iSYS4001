@@ -1,120 +1,72 @@
-/********************************************************************************************
- * iSYS4001 Threshold Minimum Demo
- * ------------------------------------------------------------------------------------------
- * This example demonstrates how to set and read back the "threshold minimum" parameter
- * on an InnoSenT iSYS4001 radar sensor using a custom driver class.
- *
- * Hardware:
- *   - Tested with ESP32 (default Serial2 pins: RX=16, TX=17)
- *   - iSYS4001 radar sensor connected via UART (115200 baud, 8N1)
- *
- * Functionality:
- *   1. Initializes Serial2 for communication with the radar.
- *   2. Sends a command to set the threshold minimum to -26 dB.
- *   3. Reads back the threshold minimum from the sensor to verify.
- *   4. Periodically polls the threshold every 5 seconds and prints the value.
- *
- * Configuration:
- *   - DESTINATION_ADDRESS: The radar's address (default 0x80).
- *   - TIMEOUT_MS: Maximum wait time for responses (default 300 ms).
- *   - RX_PIN / TX_PIN: ESP32 pins used for Serial2.
- *
- * Notes:
- *   - Ensure your radar is wired correctly to Serial2 pins.
- *   - Change DESTINATION_ADDRESS if your radar uses a different address.
- *   - Uncomment "saveAllSettings()" block if you want to persist changes to EEPROM
- ********************************************************************************************/
-#include "iSYS4001.h"
+/*
+  ESP32 UART2 Multi-Command Test for iSYS Radar
+  ---------------------------------------------
+  - Sends multiple command frames to the radar via UART2 (pins RX=16, TX=17).
+  - Prints the transmitted bytes (TX) and received response (RX) in HEX format.
+  - Sends each command once, then loops again.
+*/
 
-// Create radar object on Serial2 at 115200 baud
-iSYS4001 radar(Serial2, 115200);
+#include <Arduino.h>
 
-// Configuration
-constexpr uint8_t DESTINATION_ADDRESS = 0x80; // Adjust to your sensor address
-constexpr uint32_t TIMEOUT_MS = 300;          // Response timeout (ms)
-constexpr int RX_PIN = 16;
-constexpr int TX_PIN = 17;
+// Use UART2 (pins 16 = RX, 17 = TX on ESP32)
+HardwareSerial RadarSerial(2);
 
-static void printResult(const char *label, iSYSResult_t res)
-{
-  Serial.print(label);
-  Serial.print(": ");
-  Serial.println(res);
+// Define multiple commands
+uint8_t cmd1[] = {0x68, 0x07, 0x07, 0x68, 0x80, 0x01, 0xD3, 0x00, 0x17, 0x00, 0x64, 0xCF, 0x16};
+uint8_t cmd2[] = {0x68, 0x05, 0x05, 0x68, 0x80, 0x01, 0xD2, 0x00, 0x17, 0x6A, 0x16};
+uint8_t cmd3[] = {0x68, 0x04, 0x04, 0x68, 0x80, 0x01, 0xDF, 0x04, 0x64, 0x16}; // SAVE ALL
+
+// Array of pointers to commands
+uint8_t* commands[] = {cmd1, cmd2, cmd3};
+// Array with lengths of each command
+size_t cmdLengths[] = {sizeof(cmd1), sizeof(cmd2), sizeof(cmd3)};
+
+// Number of commands
+const size_t numCommands = sizeof(commands) / sizeof(commands[0]);
+
+void sendCommand(uint8_t* cmd, size_t len) {
+  Serial.print("TX: ");
+  for (size_t i = 0; i < len; i++) {
+    if (cmd[i] < 0x10) Serial.print("0");
+    Serial.print(cmd[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+
+  RadarSerial.write(cmd, len);
+  RadarSerial.flush();
+
+  delay(50); // small delay after sending
 }
 
-void setup()
-{
+void readResponse() {
+  if (RadarSerial.available()) {
+    Serial.print("RX: ");
+    while (RadarSerial.available()) {
+      uint8_t b = RadarSerial.read();
+      if (b < 0x10) Serial.print("0");
+      Serial.print(b, HEX);
+      Serial.print(" ");
+    }
+    Serial.println();
+  }
+}
+
+void setup() {
   Serial.begin(115200);
-  while (!Serial)
-  {
-    delay(10);
-  }
-
-  // Initialize Serial2 (ESP32 default: RX=16, TX=17)
-  Serial2.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
-
-  // Clear any stale bytes
-  while (Serial2.available())
-  {
-    Serial2.read();
-  }
-  delay(300);
-
-  Serial.println("\n=== iSYS4001 Threshold Min Demo ===");
-
-  // Set threshold min to -26 dB
-  // int16_t setValue = -26;
-  // iSYSResult_t r = radar.iSYS_setThresholdMin(setValue, DESTINATION_ADDRESS, TIMEOUT_MS);
-  // if (r != ERR_OK) {
-  // 	Serial.print("SET threshold min failed: ");
-  // 	Serial.println(r);
-  // } else {
-  // 	Serial.print("SET threshold min OK (");
-  // 	Serial.print(setValue);
-  // 	Serial.println(" dB)");
-  // }
-
-  // Read back and print (value is returned in dB)
-  int16_t readBack = 0;
-  iSYSResult_t r = radar.iSYS_getThresholdMin(&readBack, DESTINATION_ADDRESS, TIMEOUT_MS);
-  if (r != ERR_OK)
-  {
-    Serial.print("GET threshold min failed: ");
-    Serial.println(r);
-  }
-  else
-  {
-    Serial.print("GET threshold min = ");
-    Serial.print(readBack);
-    Serial.println(" dB");
-  }
-
-  // Example (only if implemented in your class)
-  Serial.println("Example: Save all settings");
-  iSYSResult_t result = radar.saveAllSettings(DESTINATION_ADDRESS, TIMEOUT_MS);
-  printResult("Save all settings", result);
-  delay(2000);
+  RadarSerial.begin(115200, SERIAL_8N1, 16, 17);
+  Serial.println("Starting multi-command UART test...");
 }
 
-void loop()
-{
-  // Optionally poll the threshold every 5 seconds
-  static uint32_t last = 0;
-  if (millis() - last > 5000)
-  {
-    last = millis();
-    int16_t value = 0;
-    iSYSResult_t r = radar.iSYS_getThresholdMin(&value, DESTINATION_ADDRESS, TIMEOUT_MS);
-    if (r == ERR_OK)
-    {
-      Serial.print("Threshold min: ");
-      Serial.print(value);
-      Serial.println(" dB");
-    }
-    else
-    {
-      Serial.print("Read error: ");
-      Serial.println(r);
-    }
+void loop() {
+  for (size_t i = 0; i < numCommands; i++) {
+    sendCommand(commands[i], cmdLengths[i]);
+
+    // Wait and try to read response
+    delay(100);
+    readResponse();
   }
+
+  Serial.println("All commands sent. Looping again...");
+  delay(1000); // wait before repeating
 }

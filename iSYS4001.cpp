@@ -2961,3 +2961,254 @@ iSYSResult_t iSYS4001::iSYS_getThresholdMin(sint16_t *sensitivity, uint8_t destA
 
     return ERR_OK;
 }
+
+
+/***************************************************************
+ *  SET/GET THRESHOLD SENSITIVITY LEFT/RIGHT FUNCTIONS
+ ***************************************************************/
+// Write threshold sensitivity LEFT (function 0xD3, sub 0x0016)
+iSYSResult_t iSYS4001::iSYS_setThresholdSensitivityLeft(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+    if (sensitivity < -30 || sensitivity > 30)
+    {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+
+    sint16_t scaled = sensitivity * 10; // 0.1 dB units
+
+    uint8_t command[13];
+    uint8_t idx = 0;
+    command[idx++] = 0x68;
+    command[idx++] = 0x07;
+    command[idx++] = 0x07;
+    command[idx++] = 0x68;
+    command[idx++] = destAddress;
+    command[idx++] = 0x01;
+    command[idx++] = 0xD3; // write threshold
+    command[idx++] = 0x00; // sub MSB
+    command[idx++] = 0x16; // sub LSB (threshold sensitivity left)
+    command[idx++] = (uint8_t)((scaled >> 8) & 0xFF);
+    command[idx++] = (uint8_t)(scaled & 0xFF);
+
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    command[idx++] = fcs;
+    command[idx++] = 0x16;
+
+    _serial.write(command, 13);
+    _serial.flush();
+
+    // Expect 9-byte ack
+    uint8_t response[9];
+    uint32_t start = millis();
+    uint8_t r = 0;
+    while ((millis() - start) < timeout && r < 9)
+    {
+        if (_serial.available())
+        {
+            response[r++] = _serial.read();
+            if (response[r - 1] == 0x16)
+                break;
+        }
+    }
+    if (r == 0)
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    if (r < 9)
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD3 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    uint8_t expected = calculateFCS(response, 4, 6);
+    if (response[7] != expected)
+        return ERR_INVALID_CHECKSUM;
+    return ERR_OK;
+}
+
+// Write threshold sensitivity RIGHT (function 0xD3, sub 0x0017)
+iSYSResult_t iSYS4001::iSYS_setThresholdSensitivityRight(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+    if (sensitivity < -30 || sensitivity > 30)
+    {
+        return ERR_PARAMETER_OUT_OF_RANGE;
+    }
+
+    sint16_t scaled = sensitivity * 10; // 0.1 dB units
+
+    uint8_t command[13];
+    uint8_t idx = 0;
+    command[idx++] = 0x68;
+    command[idx++] = 0x07;
+    command[idx++] = 0x07;
+    command[idx++] = 0x68;
+    command[idx++] = destAddress;
+    command[idx++] = 0x01;
+    command[idx++] = 0xD3; // write threshold
+    command[idx++] = 0x00; // sub MSB
+    command[idx++] = 0x17; // sub LSB (threshold sensitivity right)
+    command[idx++] = (uint8_t)((scaled >> 8) & 0xFF);
+    command[idx++] = (uint8_t)(scaled & 0xFF);
+
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    command[idx++] = fcs;
+    command[idx++] = 0x16;
+
+    _serial.write(command, 13);
+    _serial.flush();
+
+    uint8_t response[9];
+    uint32_t start = millis();
+    uint8_t r = 0;
+    while ((millis() - start) < timeout && r < 9)
+    {
+        if (_serial.available())
+        {
+            response[r++] = _serial.read();
+            if (response[r - 1] == 0x16)
+                break;
+        }
+    }
+    if (r == 0)
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    if (r < 9)
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD3 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    uint8_t expected = calculateFCS(response, 4, 6);
+    if (response[7] != expected)
+        return ERR_INVALID_CHECKSUM;
+    return ERR_OK;
+}
+
+// Read threshold sensitivity LEFT (function 0xD2, sub 0x0016)
+iSYSResult_t iSYS4001::iSYS_getThresholdSensitivityLeft(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout)
+{
+    if (sensitivity == NULL)
+        return ERR_NULL_POINTER;
+    if (timeout == 0)
+        return ERR_TIMEOUT;
+
+    uint8_t command[11];
+    uint8_t idx = 0;
+    command[idx++] = 0x68;
+    command[idx++] = 0x05;
+    command[idx++] = 0x05;
+    command[idx++] = 0x68;
+    command[idx++] = destAddress;
+    command[idx++] = 0x01;
+    command[idx++] = 0xD2; // read threshold
+    command[idx++] = 0x00;
+    command[idx++] = 0x16; // left
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[idx++] = fcs;
+    command[idx++] = 0x16;
+
+    _serial.write(command, 11);
+    _serial.flush();
+
+    uint8_t response[11];
+    uint32_t start = millis();
+    uint8_t r = 0;
+    while ((millis() - start) < timeout && r < 11)
+    {
+        if (_serial.available())
+        {
+            response[r++] = _serial.read();
+            if (response[r - 1] == 0x16)
+                break;
+        }
+    }
+    if (r == 0)
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    if (r < 11)
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD2 || response[10] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    uint8_t expected = calculateFCS(response, 4, 8);
+    if (response[9] != expected)
+        return ERR_INVALID_CHECKSUM;
+
+    int16_t raw = (int16_t)(((uint16_t)response[7] << 8) | (uint16_t)response[8]);
+    if (raw >= 0)
+        *sensitivity = (raw + 5) / 10;
+    else
+        *sensitivity = (raw - 5) / 10;
+    return ERR_OK;
+}
+
+// Read threshold sensitivity RIGHT (function 0xD2, sub 0x0017)
+iSYSResult_t iSYS4001::iSYS_getThresholdSensitivityRight(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout)
+{
+    if (sensitivity == NULL)
+        return ERR_NULL_POINTER;
+    if (timeout == 0)
+        return ERR_TIMEOUT;
+
+    uint8_t command[11];
+    uint8_t idx = 0;
+    command[idx++] = 0x68;
+    command[idx++] = 0x05;
+    command[idx++] = 0x05;
+    command[idx++] = 0x68;
+    command[idx++] = destAddress;
+    command[idx++] = 0x01;
+    command[idx++] = 0xD2; // read threshold
+    command[idx++] = 0x00;
+    command[idx++] = 0x17; // right
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[idx++] = fcs;
+    command[idx++] = 0x16;
+
+    _serial.write(command, 11);
+    _serial.flush();
+
+    uint8_t response[11];
+    uint32_t start = millis();
+    uint8_t r = 0;
+    while ((millis() - start) < timeout && r < 11)
+    {
+        if (_serial.available())
+        {
+            response[r++] = _serial.read();
+            if (response[r - 1] == 0x16)
+                break;
+        }
+    }
+    if (r == 0)
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    if (r < 11)
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD2 || response[10] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+    uint8_t expected = calculateFCS(response, 4, 8);
+    if (response[9] != expected)
+        return ERR_INVALID_CHECKSUM;
+
+    int16_t raw = (int16_t)(((uint16_t)response[7] << 8) | (uint16_t)response[8]);
+    if (raw >= 0)
+        *sensitivity = (raw + 5) / 10;
+    else
+        *sensitivity = (raw - 5) / 10;
+    return ERR_OK;
+}
