@@ -122,6 +122,11 @@ class iSYS4001
 public:
     iSYS4001(HardwareSerial &serial, uint32_t baud = 115200);
 
+    // Debug configuration
+    void setDebugEnabled(bool enabled);
+    void setDebugStream(Stream &stream);
+    void setDebug(Stream &stream, bool enabled);
+
     /***************************************************************
      *  GET TARGET LIST FUNCTION
      ***************************************************************/
@@ -200,6 +205,8 @@ public:
 private:
     uint32_t _baud;
     HardwareSerial &_serial;
+    bool _debugEnabled;
+    Stream *_debugStream; // e.g., &Serial, &Serial1
 
     /***************************************************************
      *  HELPER FUNCTIONS FOR COMMUNICATION AND DECODING
@@ -237,6 +244,11 @@ private:
     iSYSResult_t receiveSetOutputSignalFilterAcknowledgement(uint8_t destAddress, uint32_t timeout);
     iSYSResult_t sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
     iSYSResult_t receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
+
+    // Debug helpers (no-ops when debug disabled or stream not set)
+    void debugPrint(const char *msg);
+    void debugPrintln(const char *msg);
+    void debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length);
 };
 
 #endif

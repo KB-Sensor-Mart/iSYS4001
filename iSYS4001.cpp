@@ -1,8 +1,65 @@
 #include "iSYS4001.h"
 
 iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
-    : _serial(serial), _baud(baud)
+    : _serial(serial), _baud(baud), _debugEnabled(false), _debugStream(nullptr)
 {
+}
+
+// =============================
+// Debug configuration methods
+// =============================
+void iSYS4001::setDebugEnabled(bool enabled)
+{
+    _debugEnabled = enabled;
+}
+
+void iSYS4001::setDebugStream(Stream &stream)
+{
+    _debugStream = &stream;
+}
+
+void iSYS4001::setDebug(Stream &stream, bool enabled)
+{
+    _debugStream = &stream;
+    _debugEnabled = enabled;
+}
+
+// Internal debug helpers
+void iSYS4001::debugPrint(const char *msg)
+{
+    if (_debugEnabled && _debugStream)
+    {
+        _debugStream->print(msg);
+    }
+}
+
+void iSYS4001::debugPrintln(const char *msg)
+{
+    if (_debugEnabled && _debugStream)
+    {
+        _debugStream->println(msg);
+    }
+}
+
+void iSYS4001::debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length)
+{
+    if (!(_debugEnabled && _debugStream))
+        return;
+    if (prefix && *prefix)
+    {
+        _debugStream->print(prefix);
+    }
+    for (size_t i = 0; i < length; i++)
+    {
+        _debugStream->print("0x");
+        if (data[i] < 0x10)
+        {
+            _debugStream->print("0");
+        }
+        _debugStream->print(data[i], HEX);
+        _debugStream->print(" ");
+    }
+    _debugStream->println();
 }
 
 /***************************************************************
@@ -57,18 +114,7 @@ iSYSResult_t iSYS4001::sendTargetListRequest(iSYSOutputNumber_t outputnumber, ui
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending command to radar: ");
-    for (int i = 0; i < 11; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-        {
-            Serial.print("0");
-        }
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending command to radar: ", command, 11);
 
     _serial.write(command, 11);
     _serial.flush();
@@ -126,12 +172,7 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
 
-    Serial.print("Received response from radar: ");
-    for (size_t i = 0; i < buffer.size(); i++)
-    {
-        Serial.printf("0x%02X ", buffer[i]);
-    }
-    Serial.println();
+    debugPrintHexFrame("Received response from radar: ", buffer.data(), buffer.size());
 
     return decodeTargetFrame(buffer.data(), buffer.size(), bitrate, pTargetList);
 }
@@ -291,15 +332,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
     command[11] = fcs;
     command[12] = 0x16;
 
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
@@ -320,15 +353,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
         }
     }
 
-    for (int i = 0; i < minIndex; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", response, minIndex);
 
     if (minIndex == 0)
     {
@@ -400,15 +425,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
@@ -427,15 +444,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
         }
     }
 
-    for (int i = 0; i < maxIndex; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", response, maxIndex);
 
     if (maxIndex == 0)
     {
@@ -506,16 +515,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, f
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending GET Range Min command: ");
-    for (int i = 0; i < 11; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending GET Range Min command: ", command, 11);
 
     _serial.write(command, 11);
     _serial.flush();
@@ -533,16 +533,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, f
         }
     }
 
-    Serial.print("Received Range Min response: ");
-    for (int i = 0; i < (int)rIdx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received Range Min response: ", response, rIdx);
 
     if (rIdx == 0)
     {
@@ -609,16 +600,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, f
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending GET Range Max command: ");
-    for (int i = 0; i < 11; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending GET Range Max command: ", command, 11);
 
     _serial.write(command, 11);
     _serial.flush();
@@ -636,16 +618,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, f
         }
     }
 
-    Serial.print("Received Range Max response: ");
-    for (int i = 0; i < (int)rIdx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received Range Max response: ", response, rIdx);
 
     if (rIdx == 0)
     {
@@ -723,15 +696,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber
     command[11] = fcs;
     command[12] = 0x16;
 
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
@@ -751,15 +716,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber
         }
     }
 
-    for (int i = 0; i < minIndex; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", response, minIndex);
 
     if (minIndex == 0)
     {
@@ -833,15 +790,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
@@ -860,15 +809,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber
         }
     }
 
-    for (int i = 0; i < maxIndex; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", response, maxIndex);
 
     if (maxIndex == 0)
     {
@@ -925,16 +866,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending GET Velocity min command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending GET Velocity min command: ", command, sizeof(command));
 
     _serial.write(command, sizeof(command));
     _serial.flush();
@@ -952,16 +884,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber
         }
     }
 
-    Serial.print("Received Velocity min response: ");
-    for (int i = 0; i < (int)rIdx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received Velocity min response: ", response, rIdx);
 
     if (rIdx == 0)
     {
@@ -1017,16 +940,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending GET Velocity max command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending GET Velocity max command: ", command, sizeof(command));
 
     _serial.write(command, sizeof(command));
     _serial.flush();
@@ -1044,16 +958,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber
         }
     }
 
-    Serial.print("Received Velocity max response: ");
-    for (int i = 0; i < (int)rIdx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received Velocity max response: ", response, rIdx);
 
     if (rIdx == 0)
     {
@@ -1271,15 +1176,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, 
         }
     }
 
-    for (int i = 0; i < maxIndex; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("", response, maxIndex);
 
     if (maxIndex == 0)
     {
@@ -1624,16 +1521,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending GET Direction command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending GET Direction command: ", command, sizeof(command));
 
     _serial.write(command, sizeof(command));
     _serial.flush();
@@ -1651,16 +1539,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
         }
     }
 
-    Serial.print("Received Direction response: ");
-    for (int i = 0; i < (int)rIdx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received Direction response: ", response, rIdx);
 
     if (rIdx == 0)
     {
@@ -1764,19 +1643,7 @@ iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunctio
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    // Debug
-    Serial.print("Sending EEPROM command to radar: ");
-    for (int i = 0; i < 10; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-        {
-            Serial.print("0");
-        }
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending EEPROM command to radar: ", command, 10);
 
     _serial.write(command, 10);
     _serial.flush();
@@ -1888,16 +1755,7 @@ iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t dest
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending SET address command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending SET address command: ", command, sizeof(command));
 
     _serial.write(command, sizeof(command));
     _serial.flush();
@@ -1916,16 +1774,7 @@ iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t dest
                 return ERR_COMMAND_MAX_DATA_OVERFLOW;
             if (b == 0x16 && count >= 9)
             {
-                Serial.print("Received SET address ack: ");
-                for (uint8_t i = 0; i < count; i++)
-                {
-                    Serial.print("0x");
-                    if (buffer[i] < 0x10)
-                        Serial.print("0");
-                    Serial.print(buffer[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
+                debugPrintHexFrame("Received SET address ack: ", buffer, count);
 
                 if (count == 9 && buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
                     buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == deviceaddress &&
@@ -1969,16 +1818,7 @@ iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t des
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending GET address command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending GET address command: ", command, sizeof(command));
 
     _serial.write(command, sizeof(command));
     _serial.flush();
@@ -1998,16 +1838,7 @@ iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t des
             if (b == 0x16 && count >= 11)
             {
 
-                Serial.print("Received GET address response: ");
-                for (uint8_t i = 0; i < count; i++)
-                {
-                    Serial.print("0x");
-                    if (buffer[i] < 0x10)
-                        Serial.print("0");
-                    Serial.print(buffer[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
+                debugPrintHexFrame("Received GET address response: ", buffer, count);
 
                 if (count == 11 && buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
                     buffer[3] == 0x68 && buffer[6] == 0xD2 && buffer[10] == 0x16)
@@ -2098,19 +1929,12 @@ iSYSResult_t iSYS4001::sendAcquisitionCommand(uint8_t destAddress, bool start)
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print(start ? "Starting" : "Stopping");
-    Serial.print(" acquisition command to radar: ");
-    for (int i = 0; i < 11; i++)
+    if (_debugEnabled && _debugStream)
     {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-        {
-            Serial.print("0");
-        }
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
+        _debugStream->print(start ? "Starting" : "Stopping");
+        _debugStream->print(" acquisition command to radar: ");
     }
-    Serial.println();
+    debugPrintHexFrame("", command, 11);
 
     _serial.write(command, 11);
     _serial.flush();
@@ -2143,17 +1967,7 @@ iSYSResult_t iSYS4001::receiveAcquisitionAcknowledgement(uint8_t destAddress, ui
             if (byte == 0x16 && index >= 9)
             {
 
-                for (int i = 0; i < index; i++)
-                {
-                    Serial.print("0x");
-                    if (buffer[i] < 0x10)
-                    {
-                        Serial.print("0");
-                    }
-                    Serial.print(buffer[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
+                debugPrintHexFrame("", buffer, index);
 
                 if (index == 9 &&
                     buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
@@ -2278,18 +2092,7 @@ iSYSResult_t iSYS4001::receiveSetOutputFilterAcknowledgement(uint8_t destAddress
 
             if (byte == 0x16 && index >= 9)
             {
-                Serial.print("Received output filter acknowledgement: ");
-                for (int i = 0; i < index; i++)
-                {
-                    Serial.print("0x");
-                    if (buffer[i] < 0x10)
-                    {
-                        Serial.print("0");
-                    }
-                    Serial.print(buffer[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
+                debugPrintHexFrame("Received output filter acknowledgement: ", buffer, index);
 
                 if (index == 9 &&
                     buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
@@ -2408,18 +2211,7 @@ iSYSResult_t iSYS4001::receiveGetOutputFilterResponse(iSYSOutput_filter_t *filte
             if (byte == 0x16 && index >= 11)
             {
 
-                Serial.print("Received output filter response: ");
-                for (int i = 0; i < index; i++)
-                {
-                    Serial.print("0x");
-                    if (buffer[i] < 0x10)
-                    {
-                        Serial.print("0");
-                    }
-                    Serial.print(buffer[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
+                debugPrintHexFrame("Received output filter response: ", buffer, index);
 
                 if (index == 11 &&
                     buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
@@ -2495,18 +2287,7 @@ iSYSResult_t iSYS4001::sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outpu
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Setting output signal filter command to radar: ");
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-        {
-            Serial.print("0");
-        }
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Setting output signal filter command to radar: ", command, 13);
 
     _serial.write(command, 13);
     _serial.flush();
@@ -2535,18 +2316,7 @@ iSYSResult_t iSYS4001::receiveSetOutputSignalFilterAcknowledgement(uint8_t destA
 
             if (byte == 0x16 && index >= 9)
             {
-                Serial.print("Received output signal filter acknowledgement: ");
-                for (int i = 0; i < index; i++)
-                {
-                    Serial.print("0x");
-                    if (buffer[i] < 0x10)
-                    {
-                        Serial.print("0");
-                    }
-                    Serial.print(buffer[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
+                debugPrintHexFrame("Received output signal filter acknowledgement: ", buffer, index);
 
                 if (index == 9 &&
                     buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
@@ -2668,18 +2438,7 @@ iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t 
             if (byte == 0x16 && index >= 11)
             {
 
-                Serial.print("Received output signal filter response: ");
-                for (int i = 0; i < index; i++)
-                {
-                    Serial.print("0x");
-                    if (buffer[i] < 0x10)
-                    {
-                        Serial.print("0");
-                    }
-                    Serial.print(buffer[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
+                debugPrintHexFrame("Received output signal filter response: ", buffer, index);
 
                 if (index == 11 &&
                     buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
