@@ -1,72 +1,135 @@
 /*
-  ESP32 UART2 Multi-Command Test for iSYS Radar
-  ---------------------------------------------
-  - Sends multiple command frames to the radar via UART2 (pins RX=16, TX=17).
-  - Prints the transmitted bytes (TX) and received response (RX) in HEX format.
-  - Sends each command once, then loops again.
-*/
+  iSYS4001 Radar Sensor (Set Range Min Max)
+ 
+ *
+ * This sketch demonstrates how to:
+ *  - Initialize communication with the iSYS4001 radar via UART (Serial2 on ESP32)
+ *  - Configure minimum and maximum detection ranges
+ *  - Save the application settings
+ *  - Start radar acquisition and fetch detected targets
+ *  - Print target details (signal, velocity, range, angle)
+ *
+ * Connections:
+ *  ESP32 TX (GPIO17) → Radar RX
+ *  ESP32 RX (GPIO16) → Radar TX
+ *  Common GND between ESP32 and Radar
+ *
+ * Notes:
+ *  - Adjust DESTINATION_ADDRESS if your sensor is configured differently.
+ *  - Timeout is set to 300 ms for radar responses.
+ *  - Results are printed to Serial Monitor at 115200 baud.
+ */
 
-#include <Arduino.h>
+#include "iSYS4001.h"
 
-// Use UART2 (pins 16 = RX, 17 = TX on ESP32)
-HardwareSerial RadarSerial(2);
+// Use Serial2 (ESP32 default pins: RX=16, TX=17). Adjust if needed for your board.
+iSYS4001 radar(Serial2, 115200);
 
-// Define multiple commands
-uint8_t cmd1[] = {0x68, 0x07, 0x07, 0x68, 0x80, 0x01, 0xD3, 0x00, 0x17, 0x00, 0x64, 0xCF, 0x16};
-uint8_t cmd2[] = {0x68, 0x05, 0x05, 0x68, 0x80, 0x01, 0xD2, 0x00, 0x17, 0x6A, 0x16};
-uint8_t cmd3[] = {0x68, 0x04, 0x04, 0x68, 0x80, 0x01, 0xDF, 0x04, 0x64, 0x16}; // SAVE ALL
+// Storage for decoded targets
+iSYSTargetList_t targetList;
 
-// Array of pointers to commands
-uint8_t* commands[] = {cmd1, cmd2, cmd3};
-// Array with lengths of each command
-size_t cmdLengths[] = {sizeof(cmd1), sizeof(cmd2), sizeof(cmd3)};
-
-// Number of commands
-const size_t numCommands = sizeof(commands) / sizeof(commands[0]);
-
-void sendCommand(uint8_t* cmd, size_t len) {
-  Serial.print("TX: ");
-  for (size_t i = 0; i < len; i++) {
-    if (cmd[i] < 0x10) Serial.print("0");
-    Serial.print(cmd[i], HEX);
-    Serial.print(" ");
-  }
-  Serial.println();
-
-  RadarSerial.write(cmd, len);
-  RadarSerial.flush();
-
-  delay(50); // small delay after sending
-}
-
-void readResponse() {
-  if (RadarSerial.available()) {
-    Serial.print("RX: ");
-    while (RadarSerial.available()) {
-      uint8_t b = RadarSerial.read();
-      if (b < 0x10) Serial.print("0");
-      Serial.print(b, HEX);
-      Serial.print(" ");
-    }
-    Serial.println();
-  }
-}
+// Configuration
+const uint8_t DESTINATION_ADDRESS = 0x80;  // Adjust per your device config
+const uint32_t TIMEOUT_MS = 300;          // Response timeout
+uint8_t SetminRangeValue = 2;             // Minimum range in meters
+uint8_t SetmaxRangeValue = 40;           // Maximum range in meters
 
 void setup() {
   Serial.begin(115200);
-  RadarSerial.begin(115200, SERIAL_8N1, 16, 17);
-  Serial.println("Starting multi-command UART test...");
+  while (!Serial) { delay(10); }
+
+  // Initialize Serial2 explicitly with pins on ESP32
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);
+
+  // Print configuration
+  Serial.print("Dest Addr: 0x"); Serial.println(DESTINATION_ADDRESS, HEX);
+  Serial.print("Timeout: "); Serial.print(TIMEOUT_MS); Serial.println(" ms");
+  Serial.println("Output: 1 (default)");
+
+  // Flush any stale bytes from radar UART
+  while (Serial2.available()) { Serial2.read(); }
+  delay(500);
+
+  // Set minimum range
+  iSYSResult_t iSYS_setOutputRangeMin = radar.iSYS_setOutputRangeMin(
+    ISYS_OUTPUT_1, SetminRangeValue, DESTINATION_ADDRESS, TIMEOUT_MS
+  );
+  if (iSYS_setOutputRangeMin != ERR_OK) {
+    Serial.print("iSYS_setOutputRangeMin failed: ");
+    Serial.println(iSYS_setOutputRangeMin, HEX);
+  } else {
+    Serial.print("Minimum range set to: ");
+    Serial.print(SetminRangeValue);
+    Serial.println(" m");
+  }
+
+  // Set maximum range
+  iSYSResult_t iSYS_setOutputRangeMax = radar.iSYS_setOutputRangeMax(
+    ISYS_OUTPUT_1, SetmaxRangeValue, DESTINATION_ADDRESS, TIMEOUT_MS
+  );
+  if (iSYS_setOutputRangeMax != ERR_OK) {
+    Serial.print("iSYS_setOutputRangeMax failed: ");
+    Serial.println(iSYS_setOutputRangeMax, HEX);
+  } else {
+    Serial.print("Maximum range set to: ");
+    Serial.print(SetmaxRangeValue);
+    Serial.println(" m");
+  }
+
+  // Save application settings
+  iSYSResult_t saveApplicationSettings = radar.saveApplicationSettings(
+    DESTINATION_ADDRESS, TIMEOUT_MS
+  );
+  if (saveApplicationSettings != ERR_OK) {
+    Serial.print("Failed to save application settings. Error: ");
+    Serial.println(saveApplicationSettings, HEX);
+  } else {
+    Serial.println("Application settings saved successfully.");
+  }
 }
 
 void loop() {
-  for (size_t i = 0; i < numCommands; i++) {
-    sendCommand(commands[i], cmdLengths[i]);
+  Serial.println("\n--- Requesting Target List ---");
 
-    // Wait and try to read response
-    delay(100);
-    readResponse();
+  // Flush UART buffer
+  while (Serial2.available()) { Serial2.read(); }
+
+  // Request target list
+  iSYSResult_t res = radar.getTargetList32(
+    &targetList,
+    DESTINATION_ADDRESS,
+    TIMEOUT_MS
+  );
+
+  // Retry once if first attempt fails
+  if (res != ERR_OK) {
+    Serial.print("First attempt failed (code "); Serial.print(res); Serial.println(") - retrying once...");
+    res = radar.getTargetList32(&targetList, DESTINATION_ADDRESS, TIMEOUT_MS);
   }
 
-  Serial.println("All commands sent. Looping again...");
-  delay(1000); // wait before repeating
+  // Handle result
+  if (res == ERR_OK) {
+    if (targetList.error.iSYSTargetListError == TARGET_LIST_OK) {
+      Serial.print("Targets: ");
+      Serial.print(targetList.nrOfTargets);
+      Serial.print(", Output: ");
+      Serial.println(targetList.outputNumber);
+
+      for (uint16_t i = 0; i < targetList.nrOfTargets && i < MAX_TARGETS; i++) {
+        Serial.print("#"); Serial.print(i + 1); Serial.println("");
+        Serial.print("  Signal: "); Serial.println(targetList.targets[i].signal);
+        Serial.print("  Velocity: "); Serial.print(targetList.targets[i].velocity); Serial.println(" m/s");
+        Serial.print("  Range: "); Serial.print(targetList.targets[i].range); Serial.println(" m");
+        Serial.print("  Angle: "); Serial.print(targetList.targets[i].angle); Serial.println(" deg");
+      }
+    } else {
+      Serial.print("Target list error code: ");
+      Serial.println(targetList.error.iSYSTargetListError);
+    }
+  } else {
+    Serial.print("Failed to get target list - error code: ");
+    Serial.println(res);
+  }
+
+  delay(300);
 }

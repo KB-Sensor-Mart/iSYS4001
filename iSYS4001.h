@@ -115,6 +115,7 @@ typedef struct iSYSTargetList
     iSYSTarget_t targets[MAX_TARGETS];
 } iSYSTargetList_t;
 
+
 class iSYS4001
 {
 
@@ -194,30 +195,7 @@ public:
     iSYSResult_t iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
 
-    /***************************************************************
-     *  SET/GET LED FUNCTIONS
-     ***************************************************************/
 
-    iSYSResult_t iSYS_setLedConfiguration(iSYSLedConfiguration_t config, uint8_t destAddress , uint32_t timeout);
-    iSYSResult_t iSYS_getLedConfiguration(iSYSLedConfiguration_t *config, uint8_t destAddress , uint32_t timeout);
-
-
-    /***************************************************************
-     *  SET/GET THRESHOLD MIN FUNCTIONS
-     ***************************************************************/
-
-    iSYSResult_t iSYS_setThresholdMin(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout);
-    iSYSResult_t iSYS_getThresholdMin(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout);
-    
-
-    /***************************************************************
-     *  SET/GET THRESHOLD SENSITIVITY LEFT/RIGHT FUNCTIONS
-     ***************************************************************/
-
-    iSYSResult_t iSYS_setThresholdSensitivityLeft(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout);
-    iSYSResult_t iSYS_setThresholdSensitivityRight(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout);
-    iSYSResult_t iSYS_getThresholdSensitivityLeft(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout);
-    iSYSResult_t iSYS_getThresholdSensitivityRight(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout);
 
 private:
     uint32_t _baud;

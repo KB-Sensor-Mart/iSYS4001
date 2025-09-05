@@ -2216,10 +2216,6 @@ iSYSResult_t iSYS4001::iSYS_setOutputFilter(iSYSOutputNumber_t outputnumber, iSY
 }
 
 // Function to send set output filter request command to the radar sensor
-// Parameters: outputnumber - specifies which output to use
-//             filterType - the filter type to set
-//             destAddress - destination address for the radar sensor
-// Returns: iSYSResult_t - error code (always ERR_OK for this function)
 iSYSResult_t iSYS4001::sendSetOutputFilterRequest(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress)
 {
     uint8_t command[13];
@@ -2260,9 +2256,6 @@ iSYSResult_t iSYS4001::sendSetOutputFilterRequest(iSYSOutputNumber_t outputnumbe
 }
 
 // Function to receive and verify set output filter acknowledgement from radar sensor
-// Parameters: destAddress - destination address for the radar sensor
-//             timeout - maximum time to wait for response in milliseconds
-// Returns: iSYSResult_t - error code indicating success or failure
 iSYSResult_t iSYS4001::receiveSetOutputFilterAcknowledgement(uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2330,11 +2323,6 @@ iSYSResult_t iSYS4001::receiveSetOutputFilterAcknowledgement(uint8_t destAddress
 }
 
 // Function to get the single target filter type from a selected output
-// Parameters: outputnumber - specifies which output to use (1, 2, or 3)
-//             filterType - pointer to store the retrieved filter type
-//             destAddress - destination address for the radar sensor
-//             timeout - maximum time to wait for response in milliseconds
-// Returns: iSYSResult_t - error code indicating success or failure
 iSYSResult_t iSYS4001::iSYS_getOutputFilter(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -2359,9 +2347,6 @@ iSYSResult_t iSYS4001::iSYS_getOutputFilter(iSYSOutputNumber_t outputnumber, iSY
 }
 
 // Function to send get output filter request command to the radar sensor
-// Parameters: outputnumber - specifies which output to use
-//             destAddress - destination address for the radar sensor
-// Returns: iSYSResult_t - error code (always ERR_OK for this function)
 iSYSResult_t iSYS4001::sendGetOutputFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
 {
 
@@ -2401,10 +2386,6 @@ iSYSResult_t iSYS4001::sendGetOutputFilterRequest(iSYSOutputNumber_t outputnumbe
 }
 
 // Function to receive and decode get output filter response from radar sensor
-// Parameters: filterType - pointer to store the retrieved filter type
-//             destAddress - destination address for the radar sensor
-//             timeout - maximum time to wait for response in milliseconds
-// Returns: iSYSResult_t - error code indicating success or failure
 iSYSResult_t iSYS4001::receiveGetOutputFilterResponse(iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2473,11 +2454,6 @@ iSYSResult_t iSYS4001::receiveGetOutputFilterResponse(iSYSOutput_filter_t *filte
 }
 
 // Function to set the single target filter signal for a selected output
-// Parameters: outputnumber - specifies which output to use (1, 2, or 3)
-//             filterSignal - the filter signal to set (off, velocity radial, range radial)
-//             destAddress - destination address for the radar sensor
-//             timeout - maximum time to wait for response in milliseconds
-// Returns: iSYSResult_t - error code indicating success or failure
 iSYSResult_t iSYS4001::iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -2497,10 +2473,6 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumbe
 }
 
 // Function to send set output signal filter request command to the radar sensor
-// Parameters: outputnumber - specifies which output to use
-//             filterSignal - the filter signal to set
-//             destAddress - destination address for the radar sensor
-// Returns: iSYSResult_t - error code (always ERR_OK for this function)
 iSYSResult_t iSYS4001::sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress)
 {
 
@@ -2542,9 +2514,6 @@ iSYSResult_t iSYS4001::sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outpu
 }
 
 // Function to receive and verify set output signal filter acknowledgement from radar sensor
-// Parameters: destAddress - destination address for the radar sensor
-//             timeout - maximum time to wait for response in milliseconds
-// Returns: iSYSResult_t - error code indicating success or failure
 iSYSResult_t iSYS4001::receiveSetOutputSignalFilterAcknowledgement(uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2611,11 +2580,6 @@ iSYSResult_t iSYS4001::receiveSetOutputSignalFilterAcknowledgement(uint8_t destA
 }
 
 // Function to get the single target filter signal from a selected output
-// Parameters: outputnumber - specifies which output to use (1, 2, or 3)
-//             filterSignal - pointer to store the retrieved filter signal
-//             destAddress - destination address for the radar sensor
-//             timeout - maximum time to wait for response in milliseconds
-// Returns: iSYSResult_t - error code indicating success or failure
 iSYSResult_t iSYS4001::iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -2640,9 +2604,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumbe
 }
 
 // Function to send get output signal filter request command to the radar sensor
-// Parameters: outputnumber - specifies which output to use
-//             destAddress - destination address for the radar sensor
-// Returns: iSYSResult_t - error code (always ERR_OK for this function)
+
 iSYSResult_t iSYS4001::sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
 {
 
@@ -2682,10 +2644,7 @@ iSYSResult_t iSYS4001::sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outpu
 }
 
 // Function to receive and decode get output signal filter response from radar sensor
-// Parameters: filterSignal - pointer to store the retrieved filter signal
-//             destAddress - destination address for the radar sensor
-//             timeout - maximum time to wait for response in milliseconds
-// Returns: iSYSResult_t - error code indicating success or failure
+
 iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2753,462 +2712,4 @@ iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t 
     }
 
     return ERR_COMMAND_NO_DATA_RECEIVED;
-}
-
-/***************************************************************
- *  SET/GET THRESHOLD MIN FUNCTIONS
- ***************************************************************/
-
-// Set Threshold Minimum (in dB, valid range: -30 .. +30)
-iSYSResult_t iSYS4001::iSYS_setThresholdMin(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout)
-{
-    if (timeout == 0)
-    {
-        return ERR_TIMEOUT;
-    }
-
-    if (sensitivity < -30 || sensitivity > 30)
-    {
-        return ERR_PARAMETER_OUT_OF_RANGE;
-    }
-
-    // Convert dB to 0.1 dB units (multiply by 10)
-    sint16_t scaledValue = sensitivity * 10;
-
-    uint8_t command[13];
-    uint8_t index = 0;
-
-    command[index++] = 0x68;
-    command[index++] = 0x07;
-    command[index++] = 0x07;
-    command[index++] = 0x68;
-    command[index++] = destAddress;
-    command[index++] = 0x01;
-    command[index++] = 0xD3;                                 // Function code: write threshold
-    command[index++] = 0x00;                                 // Sub-function MSB
-    command[index++] = 0x0B;                                 // Sub-function LSB (threshold minimum)
-    command[index++] = (uint8_t)((scaledValue >> 8) & 0xFF); // value high byte (sint16)
-    command[index++] = (uint8_t)(scaledValue & 0xFF);        // value low byte
-
-    uint8_t fcs = calculateFCS(command, 4, 10);
-    command[index++] = fcs;
-    command[index++] = 0x16;
-
-    Serial.print("Sending SET Threshold Min command: ");
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    _serial.write(command, 13);
-    _serial.flush();
-
-    // Expect 9-byte acknowledgement
-    uint8_t response[9];
-    uint32_t startTime = millis();
-    size_t idx = 0;
-    while ((millis() - startTime) < timeout && idx < 9)
-    {
-        if (_serial.available())
-        {
-            response[idx++] = _serial.read();
-            if (response[idx - 1] == 0x16)
-                break;
-        }
-    }
-
-    for (int i = 0; i < (int)idx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    if (idx == 0)
-    {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    }
-    if (idx < 9)
-    {
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    }
-
-    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
-        response[6] != 0xD3 || response[8] != 0x16)
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-
-    uint8_t expectedFCS = calculateFCS(response, 4, 6);
-    if (response[7] != expectedFCS)
-    {
-        return ERR_INVALID_CHECKSUM;
-    }
-
-    return ERR_OK;
-}
-
-// Get Threshold Minimum (returns value in dB via pointer)
-iSYSResult_t iSYS4001::iSYS_getThresholdMin(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout)
-{
-    if (sensitivity == NULL)
-    {
-        return ERR_NULL_POINTER;
-    }
-    if (timeout == 0)
-    {
-        return ERR_TIMEOUT;
-    }
-
-    uint8_t command[11];
-    uint8_t index = 0;
-
-    command[index++] = 0x68;
-    command[index++] = 0x05;
-    command[index++] = 0x05;
-    command[index++] = 0x68;
-    command[index++] = destAddress;
-    command[index++] = 0x01;
-    command[index++] = 0xD2; // Function code: read threshold
-    command[index++] = 0x00; // Sub-function MSB
-    command[index++] = 0x0B; // Sub-function LSB (threshold minimum)
-
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[index++] = fcs;
-    command[index++] = 0x16;
-
-    Serial.print("Sending GET Threshold Min command: ");
-    for (int i = 0; i < 11; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    _serial.write(command, 11);
-    _serial.flush();
-
-    uint8_t response[11];
-    uint32_t startTime = millis();
-    uint8_t rIdx = 0;
-    while ((millis() - startTime) < timeout && rIdx < 11)
-    {
-        if (_serial.available())
-        {
-            response[rIdx++] = _serial.read();
-            if (response[rIdx - 1] == 0x16)
-                break;
-        }
-    }
-
-    Serial.print("Received Threshold Min response: ");
-    for (int i = 0; i < (int)rIdx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    if (rIdx == 0)
-    {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    }
-    if (rIdx < 11)
-    {
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    }
-
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
-        response[6] != 0xD2 || response[10] != 0x16)
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-
-    uint8_t expected = calculateFCS(response, 4, 8);
-    if (response[9] != expected)
-    {
-        return ERR_INVALID_CHECKSUM;
-    }
-
-    // Parse signed 16-bit value (0.1 dB units) and convert to dB
-    int16_t raw = (int16_t)(((uint16_t)response[7] << 8) | (uint16_t)response[8]);
-    // Use proper rounding instead of truncation for 0.1 dB resolution
-    // Integer-based rounding: add 5 (half of 10) before division for proper rounding
-    if (raw >= 0)
-    {
-        *sensitivity = (raw + 5) / 10; // Round up for positive values
-    }
-    else
-    {
-        *sensitivity = (raw - 5) / 10; // Round down for negative values
-    }
-
-    return ERR_OK;
-}
-
-
-/***************************************************************
- *  SET/GET THRESHOLD SENSITIVITY LEFT/RIGHT FUNCTIONS
- ***************************************************************/
-// Write threshold sensitivity LEFT (function 0xD3, sub 0x0016)
-iSYSResult_t iSYS4001::iSYS_setThresholdSensitivityLeft(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout)
-{
-    if (timeout == 0)
-    {
-        return ERR_TIMEOUT;
-    }
-    if (sensitivity < -30 || sensitivity > 30)
-    {
-        return ERR_PARAMETER_OUT_OF_RANGE;
-    }
-
-    sint16_t scaled = sensitivity * 10; // 0.1 dB units
-
-    uint8_t command[13];
-    uint8_t idx = 0;
-    command[idx++] = 0x68;
-    command[idx++] = 0x07;
-    command[idx++] = 0x07;
-    command[idx++] = 0x68;
-    command[idx++] = destAddress;
-    command[idx++] = 0x01;
-    command[idx++] = 0xD3; // write threshold
-    command[idx++] = 0x00; // sub MSB
-    command[idx++] = 0x16; // sub LSB (threshold sensitivity left)
-    command[idx++] = (uint8_t)((scaled >> 8) & 0xFF);
-    command[idx++] = (uint8_t)(scaled & 0xFF);
-
-    uint8_t fcs = calculateFCS(command, 4, 10);
-    command[idx++] = fcs;
-    command[idx++] = 0x16;
-
-    _serial.write(command, 13);
-    _serial.flush();
-
-    // Expect 9-byte ack
-    uint8_t response[9];
-    uint32_t start = millis();
-    uint8_t r = 0;
-    while ((millis() - start) < timeout && r < 9)
-    {
-        if (_serial.available())
-        {
-            response[r++] = _serial.read();
-            if (response[r - 1] == 0x16)
-                break;
-        }
-    }
-    if (r == 0)
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    if (r < 9)
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
-        response[6] != 0xD3 || response[8] != 0x16)
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-    uint8_t expected = calculateFCS(response, 4, 6);
-    if (response[7] != expected)
-        return ERR_INVALID_CHECKSUM;
-    return ERR_OK;
-}
-
-// Write threshold sensitivity RIGHT (function 0xD3, sub 0x0017)
-iSYSResult_t iSYS4001::iSYS_setThresholdSensitivityRight(sint16_t sensitivity, uint8_t destAddress, uint32_t timeout)
-{
-    if (timeout == 0)
-    {
-        return ERR_TIMEOUT;
-    }
-    if (sensitivity < -30 || sensitivity > 30)
-    {
-        return ERR_PARAMETER_OUT_OF_RANGE;
-    }
-
-    sint16_t scaled = sensitivity * 10; // 0.1 dB units
-
-    uint8_t command[13];
-    uint8_t idx = 0;
-    command[idx++] = 0x68;
-    command[idx++] = 0x07;
-    command[idx++] = 0x07;
-    command[idx++] = 0x68;
-    command[idx++] = destAddress;
-    command[idx++] = 0x01;
-    command[idx++] = 0xD3; // write threshold
-    command[idx++] = 0x00; // sub MSB
-    command[idx++] = 0x17; // sub LSB (threshold sensitivity right)
-    command[idx++] = (uint8_t)((scaled >> 8) & 0xFF);
-    command[idx++] = (uint8_t)(scaled & 0xFF);
-
-    uint8_t fcs = calculateFCS(command, 4, 10);
-    command[idx++] = fcs;
-    command[idx++] = 0x16;
-
-    _serial.write(command, 13);
-    _serial.flush();
-
-    uint8_t response[9];
-    uint32_t start = millis();
-    uint8_t r = 0;
-    while ((millis() - start) < timeout && r < 9)
-    {
-        if (_serial.available())
-        {
-            response[r++] = _serial.read();
-            if (response[r - 1] == 0x16)
-                break;
-        }
-    }
-    if (r == 0)
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    if (r < 9)
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
-        response[6] != 0xD3 || response[8] != 0x16)
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-    uint8_t expected = calculateFCS(response, 4, 6);
-    if (response[7] != expected)
-        return ERR_INVALID_CHECKSUM;
-    return ERR_OK;
-}
-
-// Read threshold sensitivity LEFT (function 0xD2, sub 0x0016)
-iSYSResult_t iSYS4001::iSYS_getThresholdSensitivityLeft(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout)
-{
-    if (sensitivity == NULL)
-        return ERR_NULL_POINTER;
-    if (timeout == 0)
-        return ERR_TIMEOUT;
-
-    uint8_t command[11];
-    uint8_t idx = 0;
-    command[idx++] = 0x68;
-    command[idx++] = 0x05;
-    command[idx++] = 0x05;
-    command[idx++] = 0x68;
-    command[idx++] = destAddress;
-    command[idx++] = 0x01;
-    command[idx++] = 0xD2; // read threshold
-    command[idx++] = 0x00;
-    command[idx++] = 0x16; // left
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[idx++] = fcs;
-    command[idx++] = 0x16;
-
-    _serial.write(command, 11);
-    _serial.flush();
-
-    uint8_t response[11];
-    uint32_t start = millis();
-    uint8_t r = 0;
-    while ((millis() - start) < timeout && r < 11)
-    {
-        if (_serial.available())
-        {
-            response[r++] = _serial.read();
-            if (response[r - 1] == 0x16)
-                break;
-        }
-    }
-    if (r == 0)
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    if (r < 11)
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
-        response[6] != 0xD2 || response[10] != 0x16)
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-    uint8_t expected = calculateFCS(response, 4, 8);
-    if (response[9] != expected)
-        return ERR_INVALID_CHECKSUM;
-
-    int16_t raw = (int16_t)(((uint16_t)response[7] << 8) | (uint16_t)response[8]);
-    if (raw >= 0)
-        *sensitivity = (raw + 5) / 10;
-    else
-        *sensitivity = (raw - 5) / 10;
-    return ERR_OK;
-}
-
-// Read threshold sensitivity RIGHT (function 0xD2, sub 0x0017)
-iSYSResult_t iSYS4001::iSYS_getThresholdSensitivityRight(sint16_t *sensitivity, uint8_t destAddress, uint32_t timeout)
-{
-    if (sensitivity == NULL)
-        return ERR_NULL_POINTER;
-    if (timeout == 0)
-        return ERR_TIMEOUT;
-
-    uint8_t command[11];
-    uint8_t idx = 0;
-    command[idx++] = 0x68;
-    command[idx++] = 0x05;
-    command[idx++] = 0x05;
-    command[idx++] = 0x68;
-    command[idx++] = destAddress;
-    command[idx++] = 0x01;
-    command[idx++] = 0xD2; // read threshold
-    command[idx++] = 0x00;
-    command[idx++] = 0x17; // right
-    uint8_t fcs = calculateFCS(command, 4, 8);
-    command[idx++] = fcs;
-    command[idx++] = 0x16;
-
-    _serial.write(command, 11);
-    _serial.flush();
-
-    uint8_t response[11];
-    uint32_t start = millis();
-    uint8_t r = 0;
-    while ((millis() - start) < timeout && r < 11)
-    {
-        if (_serial.available())
-        {
-            response[r++] = _serial.read();
-            if (response[r - 1] == 0x16)
-                break;
-        }
-    }
-    if (r == 0)
-        return ERR_COMMAND_NO_DATA_RECEIVED;
-    if (r < 11)
-        return ERR_COMMAND_RX_FRAME_LENGTH;
-    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
-        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
-        response[6] != 0xD2 || response[10] != 0x16)
-    {
-        return ERR_COMMAND_RX_FRAME_DAMAGED;
-    }
-    uint8_t expected = calculateFCS(response, 4, 8);
-    if (response[9] != expected)
-        return ERR_INVALID_CHECKSUM;
-
-    int16_t raw = (int16_t)(((uint16_t)response[7] << 8) | (uint16_t)response[8]);
-    if (raw >= 0)
-        *sensitivity = (raw + 5) / 10;
-    else
-        *sensitivity = (raw - 5) / 10;
-    return ERR_OK;
 }
