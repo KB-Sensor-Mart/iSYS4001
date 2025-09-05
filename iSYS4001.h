@@ -115,22 +115,22 @@ typedef struct iSYSTargetList
     iSYSTarget_t targets[MAX_TARGETS];
 } iSYSTargetList_t;
 
-
 class iSYS4001
 {
 
 public:
     iSYS4001(HardwareSerial &serial, uint32_t baud = 115200);
 
-    // Debug configuration
-    void setDebugEnabled(bool enabled);
-    void setDebugStream(Stream &stream);
-    void setDebug(Stream &stream, bool enabled);
+    /***************************************************************
+     *  DEBUG FUNCTIONS
+     ***************************************************************/
+    iSYSResult_t setDebugEnabled(bool enabled);
+    iSYSResult_t setDebugStream(Stream &stream);
+    iSYSResult_t setDebug(Stream &stream, bool enabled);
 
     /***************************************************************
      *  GET TARGET LIST FUNCTION
      ***************************************************************/
-    iSYSResult_t getTargetList(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
     iSYSResult_t getTargetList16(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
     iSYSResult_t getTargetList32(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
 
@@ -195,12 +195,10 @@ public:
      *  OUTPUT SINGLE TARGET FILTER FUNCTIONS
      ***************************************************************/
 
-    iSYSResult_t iSYS_setOutputFilter(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress, uint32_t timeout);
-    iSYSResult_t iSYS_getOutputFilter(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_setOutputFilterType(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getOutputFilterType(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
-
-
 
 private:
     uint32_t _baud;
@@ -245,10 +243,10 @@ private:
     iSYSResult_t sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
     iSYSResult_t receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
 
-    // Debug helpers (no-ops when debug disabled or stream not set)
-    void debugPrint(const char *msg);
-    void debugPrintln(const char *msg);
-    void debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length);
+    // Debug helpers (return status)
+    iSYSResult_t debugPrint(const char *msg);
+    iSYSResult_t debugPrintln(const char *msg);
+    iSYSResult_t debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length);
 };
 
 #endif
