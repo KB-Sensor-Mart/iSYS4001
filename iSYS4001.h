@@ -213,6 +213,10 @@ private:
     /***************************************************************
      *  HELPER FUNCTIONS FOR COMMUNICATION AND DECODING
      ***************************************************************/
+    
+    // Internal debug helpers (simplified, no return values)
+    void debugPrint(const char *msg, bool newline = false);
+    void debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length);
 
     iSYSResult_t decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements, uint8_t bitrate, iSYSTargetList_t *targetList);
     iSYSResult_t sendTargetListRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress, uint8_t bitrate);
@@ -254,9 +258,6 @@ private:
     iSYSResult_t sendSetMultipleTargetFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
     iSYSResult_t receiveSetMultipleTargetFilterAcknowledgement(uint8_t destAddress, uint32_t timeout);
 
-    // Debug helpers (return status)
-    iSYSResult_t debugPrint(const char *msg, bool newline = false);
-    iSYSResult_t debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length);
 };
 
 #endif

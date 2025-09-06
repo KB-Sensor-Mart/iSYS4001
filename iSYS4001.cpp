@@ -13,13 +13,13 @@ iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
  * Overview
  *  - Configure library-level debug logging and helper printing.
  *  - You can set the output Stream (e.g., Serial) and enable/disable logging.
- *  - Helper methods (`debugPrint`, `debugPrintHexFrame`) respect
- *    the enabled flag and return a status so callers can check for issues.
+ *  - Helper methods (`debugPrint`, `debugPrintHexFrame`) are internal and
+ *    automatically respect the enabled flag - no return values needed.
  *
  * Functions
- *  - setDebug(Stream &stream, bool enabled)
- *  - debugPrint(const char*, bool newline = false)
- *  - debugPrintHexFrame(const char* prefix, const uint8_t* data, size_t length)
+ *  - setDebug(Stream &stream, bool enabled) - public API
+ *  - debugPrint(const char*, bool newline = false) - internal helper
+ *  - debugPrintHexFrame(const char* prefix, const uint8_t* data, size_t length) - internal helper
  *
  * Parameters
  *  - enabled:   turn library debug on/off
@@ -32,19 +32,14 @@ iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
  *
  * Return (iSYSResult_t)
  *  - setDebug: ERR_OK, or ERR_NULL_POINTER if stream is invalid
- *  - debugPrint, debugPrintHexFrame:
- *      - ERR_OK on successful print
- *      - ERR_COMMAND_NO_DATA_RECEIVED if debug is disabled or stream not set
- *      - ERR_NULL_POINTER if message/data pointer is null (and length > 0 for hex)
+ *  - debugPrint, debugPrintHexFrame: void (no return values - simplified)
  *
  * Notes
- *  - Debug output is a no-op when disabled or when no stream is configured; helpers
- *    return an error code so you can detect and react during testing.
+ *  - Debug output is a no-op when disabled or when no stream is configured
+ *  - Internal debug helpers are optimized for performance and simplicity
  *
  * Usage example
- *  radar.setDebug(Serial, true);
- *  radar.debugPrint("Radar debug enabled", true);  // with newline
- *  radar.debugPrint("Debug: ");                     // without newline
+ *  radar.setDebug(Serial, true);  // Enable debug output
  */
 iSYSResult_t iSYS4001::setDebug(Stream &stream, bool enabled)
 {
@@ -53,52 +48,33 @@ iSYSResult_t iSYS4001::setDebug(Stream &stream, bool enabled)
     return (_debugStream != nullptr) ? ERR_OK : ERR_NULL_POINTER;
 }
 
-// Internal debug helpers
-iSYSResult_t iSYS4001::debugPrint(const char *msg, bool newline)
+// Internal debug helpers - simplified and efficient
+void iSYS4001::debugPrint(const char *msg, bool newline)
 {
-    if (!(_debugEnabled && _debugStream))
+    if (_debugEnabled && _debugStream && msg)
     {
-        return ERR_COMMAND_NO_DATA_RECEIVED; // treat as no-op due to disabled or missing stream
+        if (newline)
+            _debugStream->println(msg);
+        else
+            _debugStream->print(msg);
     }
-    if (msg == nullptr)
-    {
-        return ERR_NULL_POINTER;
-    }
-    if (newline)
-    {
-        _debugStream->println(msg);
-    }
-    else
-    {
-        _debugStream->print(msg);
-    }
-    return ERR_OK;
 }
 
-iSYSResult_t iSYS4001::debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length)
+void iSYS4001::debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length)
 {
-    if (!(_debugEnabled && _debugStream))
-        return ERR_COMMAND_NO_DATA_RECEIVED;
+    if (!(_debugEnabled && _debugStream) || (data == nullptr && length > 0))
+        return;
+
     if (prefix && *prefix)
-    {
         _debugStream->print(prefix);
-    }
-    if (data == nullptr && length > 0)
-    {
-        return ERR_NULL_POINTER;
-    }
+
     for (size_t i = 0; i < length; i++)
     {
-        _debugStream->print("0x");
-        if (data[i] < 0x10)
-        {
-            _debugStream->print("0");
-        }
+        _debugStream->print(data[i] < 0x10 ? "0x0" : "0x");
         _debugStream->print(data[i], HEX);
         _debugStream->print(" ");
     }
     _debugStream->println();
-    return ERR_OK;
 }
 
 /***************************************************************
@@ -461,10 +437,15 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
     command[11] = fcs;
     command[12] = 0x16;
 
-    debugPrintHexFrame("", command, 13);
+    debugPrintHexFrame("Sending SET range min command to radar: ", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     // Response Buffer
     uint8_t response[9];
@@ -482,7 +463,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
         }
     }
 
-    debugPrintHexFrame("", response, minIndex);
+    debugPrintHexFrame("Received SET range min acknowledgement: ", response, minIndex);
 
     if (minIndex == 0)
     {
@@ -554,10 +535,15 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    debugPrintHexFrame("", command, 13);
+    debugPrintHexFrame("Sending SET range max command to radar: ", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[9];
     uint32_t startTime = millis();
@@ -573,7 +559,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
         }
     }
 
-    debugPrintHexFrame("", response, maxIndex);
+    debugPrintHexFrame("Received SET range max acknowledgement: ", response, maxIndex);
 
     if (maxIndex == 0)
     {
@@ -640,10 +626,15 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, f
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    debugPrintHexFrame("Sending GET Range Min command: ", command, 11);
+    debugPrintHexFrame("Sending GET Range Min command: ", command, sizeof(command));
 
-    _serial.write(command, 11);
+    size_t bytesWritten = _serial.write(command, 11);
     _serial.flush();
+
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[11];
     uint32_t startTime = millis();
@@ -725,10 +716,15 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, f
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    debugPrintHexFrame("Sending GET Range Max command: ", command, 11);
+    debugPrintHexFrame("Sending GET Range Max command: ", command, sizeof(command));
 
-    _serial.write(command, 11);
+    size_t bytesWritten = _serial.write(command, 11);
     _serial.flush();
+
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[11];
     uint32_t startTime = millis();
@@ -866,10 +862,15 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber
     command[11] = fcs;
     command[12] = 0x16;
 
-    debugPrintHexFrame("", command, 13);
+    debugPrintHexFrame("Sending SET velocity min command to radar: ", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[9];
     size_t minIndex = 0;
@@ -886,7 +887,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber
         }
     }
 
-    debugPrintHexFrame("", response, minIndex);
+    debugPrintHexFrame("Received SET velocity min acknowledgement: ", response, minIndex);
 
     if (minIndex == 0)
     {
@@ -960,10 +961,15 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    debugPrintHexFrame("", command, 13);
+    debugPrintHexFrame("Sending SET velocity max command to radar: ", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[9];
     uint32_t startTime = millis();
@@ -979,7 +985,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber
         }
     }
 
-    debugPrintHexFrame("", response, maxIndex);
+    debugPrintHexFrame("Received SET velocity max acknowledgement: ", response, maxIndex);
 
     if (maxIndex == 0)
     {
@@ -1017,6 +1023,16 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber
     if (velocity == NULL)
         return ERR_NULL_POINTER;
 
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
+    {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
     uint8_t command[11];
     uint8_t index = 0;
     command[index++] = 0x68;
@@ -1034,8 +1050,13 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber
 
     debugPrintHexFrame("Sending GET Velocity min command: ", command, sizeof(command));
 
-    _serial.write(command, sizeof(command));
+    size_t bytesWritten = _serial.write(command, sizeof(command));
     _serial.flush();
+
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[11];
     uint32_t startTime = millis();
@@ -1091,6 +1112,16 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber
     if (velocity == NULL)
         return ERR_NULL_POINTER;
 
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
+    {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
     uint8_t command[11];
     uint8_t index = 0;
     command[index++] = 0x68;
@@ -1108,8 +1139,13 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber
 
     debugPrintHexFrame("Sending GET Velocity max command: ", command, sizeof(command));
 
-    _serial.write(command, sizeof(command));
+    size_t bytesWritten = _serial.write(command, sizeof(command));
     _serial.flush();
+
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[11];
     uint32_t startTime = millis();
@@ -1248,18 +1284,15 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMin(iSYSOutputNumber_t outputnumber, 
     command[11] = fcs;
     command[12] = 0x16;
 
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending SET signal min command to radar: ", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[9];
     size_t minIndex = 0;
@@ -1276,15 +1309,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMin(iSYSOutputNumber_t outputnumber, 
         }
     }
 
-    for (int i = 0; i < minIndex; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received SET signal min acknowledgement: ", response, minIndex);
 
     if (minIndex == 0)
     {
@@ -1357,18 +1382,15 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, 
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending SET signal max command to radar: ", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[9];
     uint32_t startTime = millis();
@@ -1384,7 +1406,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, 
         }
     }
 
-    debugPrintHexFrame("", response, maxIndex);
+    debugPrintHexFrame("Received SET signal max acknowledgement: ", response, maxIndex);
 
     if (maxIndex == 0)
     {
@@ -1438,19 +1460,15 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, 
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending GET Signal Min command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending GET Signal Min command: ", command, sizeof(command));
 
-    _serial.write(command, sizeof(command));
+    size_t bytesWritten = _serial.write(command, sizeof(command));
     _serial.flush();
+
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[11];
     uint32_t startTime = millis();
@@ -1465,16 +1483,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, 
         }
     }
 
-    Serial.print("Received Signal Min response: ");
-    for (int i = 0; i < (int)rIdx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received Signal Min response: ", response, rIdx);
 
     if (rIdx == 0)
     {
@@ -1531,19 +1540,15 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, 
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Sending GET Signal Max command: ");
-    for (int i = 0; i < (int)sizeof(command); i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending GET Signal Max command: ", command, sizeof(command));
 
-    _serial.write(command, sizeof(command));
+    size_t bytesWritten = _serial.write(command, sizeof(command));
     _serial.flush();
+
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
 
     uint8_t response[11];
     uint32_t startTime = millis();
@@ -1558,16 +1563,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, 
         }
     }
 
-    Serial.print("Received Signal Max response: ");
-    for (int i = 0; i < (int)rIdx; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received Signal Max response: ", response, rIdx);
 
     if (rIdx == 0)
     {
@@ -1678,49 +1674,39 @@ iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, 
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-            Serial.print("0");
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Sending SET direction command to radar: ", command, 13);
 
     size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
 
-    uint8_t response[9];
-    uint32_t startTime = millis();
-    size_t maxIndex = 0;
-
-    while ((millis() - startTime) < timeout && maxIndex < 9)
-    {
-        if (_serial.available())
-        {
-            response[maxIndex++] = _serial.read();
-            if (response[maxIndex - 1] == 0x16)
-                break;
-        }
-    }
-
-    for (int i = 0; i < maxIndex; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-
-    if (maxIndex == 0)
+    if (bytesWritten != 13)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (maxIndex < 9)
+    uint8_t response[9];
+    size_t responseIndex = 0;
+    uint32_t startTime = millis();
+
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
+    {
+        if (_serial.available())
+        {
+            response[responseIndex++] = _serial.read();
+
+            if (response[responseIndex - 1] == 0x16)
+                break;
+        }
+    }
+
+    debugPrintHexFrame("Received SET direction acknowledgement: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 9)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -1732,7 +1718,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, 
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
 
-    if (maxIndex >= 9)
+    if (responseIndex >= 9)
     {
         uint8_t expectedFCS = calculateFCS(response, 4, 6);
         if (response[7] != expectedFCS)
@@ -1747,10 +1733,19 @@ iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, 
 //``````````````````````````````````````````````````````````` GET OUTPUT DIRECTION FUNCTION ```````````````````````````````````````````````````````````//
 
 iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t *direction, uint8_t destAddress, uint32_t timeout)
-
 {
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
+    {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
+
     if (direction == NULL)
         return ERR_NULL_POINTER;
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
 
     uint8_t command[11];
     uint8_t index = 0;
@@ -1769,30 +1764,37 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
 
     debugPrintHexFrame("Sending GET Direction command: ", command, sizeof(command));
 
-    _serial.write(command, sizeof(command));
+    size_t bytesWritten = _serial.write(command, sizeof(command));
     _serial.flush();
 
-    uint8_t response[11];
-    uint32_t startTime = millis();
-    uint8_t rIdx = 0;
-    while ((millis() - startTime) < timeout && rIdx < 11)
-    {
-        if (_serial.available())
-        {
-            response[rIdx++] = _serial.read();
-            if (response[rIdx - 1] == 0x16)
-                break;
-        }
-    }
-
-    debugPrintHexFrame("Received Direction response: ", response, rIdx);
-
-    if (rIdx == 0)
+    if (bytesWritten != sizeof(command))
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (rIdx < 11)
+    uint8_t response[11];
+    size_t responseIndex = 0;
+    uint32_t startTime = millis();
+
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
+    {
+        if (_serial.available())
+        {
+            response[responseIndex++] = _serial.read();
+
+            if (response[responseIndex - 1] == 0x16)
+                break;
+        }
+    }
+
+    debugPrintHexFrame("Received Direction response: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 11)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -1804,9 +1806,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
 
-    *direction = (iSYSDirection_type_t)response[8];
-
-    if (rIdx == 11)
+    if (responseIndex >= 11)
     {
         uint8_t expectedFCS = calculateFCS(response, 4, 8);
         if (response[9] != expectedFCS)
@@ -1815,6 +1815,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
         }
     }
 
+    *direction = (iSYSDirection_type_t)response[8];
     return ERR_OK;
 }
 
@@ -1866,6 +1867,10 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
 
 iSYSResult_t iSYS4001::sendEEPROMCommand(iSYSEEPROMSubFunction_t subFunction, uint8_t destAddress, uint32_t timeout)
 {
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
 
     iSYSResult_t res = sendEEPROMCommandFrame(subFunction, destAddress);
     if (res != ERR_OK)
@@ -1910,7 +1915,6 @@ iSYSResult_t iSYS4001::saveAllSettings(uint8_t destAddress, uint32_t timeout)
 
 iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunction, uint8_t destAddress)
 {
-
     uint8_t command[10];
     uint8_t index = 0;
 
@@ -1929,44 +1933,48 @@ iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunctio
 
     debugPrintHexFrame("Sending EEPROM command to radar: ", command, 10);
 
-    _serial.write(command, 10);
+    size_t bytesWritten = _serial.write(command, 10);
     _serial.flush();
+
+    if (bytesWritten != 10)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
     return ERR_OK;
 }
 //``````````````````````````````````````````````````````````` RECEIVE EEPROM ACKNOWLEDGEMENT FUNCTION ```````````````````````````````````````````````````````````//
 
 iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress, uint32_t timeout)
 {
-    uint32_t startTime = millis();
-    uint8_t response[9];
-    uint16_t maxIndex = 0;
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
 
-    while ((millis() - startTime) < timeout && maxIndex < 9)
+    uint8_t response[9];
+    size_t responseIndex = 0;
+    uint32_t startTime = millis();
+
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
     {
         if (_serial.available())
         {
-            response[maxIndex++] = _serial.read();
-            if (response[maxIndex - 1] == 0x16)
+            response[responseIndex++] = _serial.read();
+
+            if (response[responseIndex - 1] == 0x16)
                 break;
         }
     }
 
-    for (int i = 0; i < maxIndex; i++)
-    {
-        Serial.print("0x");
-        if (response[i] < 0x10)
-            Serial.print("0");
-        Serial.print(response[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Received EEPROM acknowledgement: ", response, responseIndex);
 
-    if (maxIndex == 0)
+    if (responseIndex == 0)
     {
         return ERR_COMMAND_NO_DATA_RECEIVED;
     }
 
-    if (maxIndex < 9)
+    if (responseIndex < 9)
     {
         return ERR_COMMAND_RX_FRAME_LENGTH;
     }
@@ -1978,7 +1986,7 @@ iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress, uint32_
         return ERR_COMMAND_RX_FRAME_DAMAGED;
     }
 
-    if (maxIndex >= 9)
+    if (responseIndex >= 9)
     {
         uint8_t expectedFCS = calculateFCS(response, 4, 6);
         if (response[7] != expectedFCS)
@@ -2072,6 +2080,10 @@ uint8_t iSYS4001::calculateFCS(const uint8_t *data, uint8_t startIndex, uint8_t 
 
 iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t destAddress, uint32_t timeout)
 {
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
 
     uint8_t command[13];
     uint8_t index = 0;
@@ -2094,40 +2106,58 @@ iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t dest
 
     debugPrintHexFrame("Sending SET address command: ", command, sizeof(command));
 
-    _serial.write(command, sizeof(command));
+    size_t bytesWritten = _serial.write(command, sizeof(command));
     _serial.flush();
 
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    uint8_t response[9];
+    size_t responseIndex = 0;
     uint32_t startTime = millis();
-    uint8_t buffer[32];
-    uint8_t count = 0;
-    while ((millis() - startTime) < timeout)
+
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
     {
         if (_serial.available())
         {
-            uint8_t b = _serial.read();
-            if (count < sizeof(buffer))
-                buffer[count++] = b;
-            else
-                return ERR_COMMAND_MAX_DATA_OVERFLOW;
-            if (b == 0x16 && count >= 9)
-            {
-                debugPrintHexFrame("Received SET address ack: ", buffer, count);
+            response[responseIndex++] = _serial.read();
 
-                if (count == 9 && buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
-                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == deviceaddress &&
-                    buffer[6] == 0xD3 && buffer[8] == 0x16)
-                {
-                    uint8_t calc = calculateFCS(buffer, 4, 6);
-                    if (calc == buffer[7])
-                        return ERR_OK;
-                    return ERR_COMMAND_RX_FRAME_DAMAGED;
-                }
-                return ERR_COMMAND_RX_FRAME_DAMAGED;
-            }
+            if (response[responseIndex - 1] == 0x16)
+                break;
         }
     }
 
-    return ERR_COMMAND_NO_DATA_RECEIVED;
+    debugPrintHexFrame("Received SET address acknowledgement: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 9)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != deviceaddress ||
+        response[6] != 0xD3 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 9)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6);
+        if (response[7] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    return ERR_OK;
 }
 
 //``````````````````````````````````````````````````````````` GET DEVICE ADDRESS FUNCTION ```````````````````````````````````````````````````````````//
@@ -2136,6 +2166,11 @@ iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t des
 {
     if (deviceaddress == NULL)
         return ERR_NULL_POINTER;
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
 
     uint8_t command[11];
     uint8_t index = 0;
@@ -2154,43 +2189,58 @@ iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t des
 
     debugPrintHexFrame("Sending GET address command: ", command, sizeof(command));
 
-    _serial.write(command, sizeof(command));
+    size_t bytesWritten = _serial.write(command, sizeof(command));
     _serial.flush();
 
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    uint8_t response[11];
+    size_t responseIndex = 0;
     uint32_t startTime = millis();
-    uint8_t buffer[32];
-    uint8_t count = 0;
-    while ((millis() - startTime) < timeout)
+
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
     {
         if (_serial.available())
         {
-            uint8_t b = _serial.read();
-            if (count < sizeof(buffer))
-                buffer[count++] = b;
-            else
-                return ERR_COMMAND_MAX_DATA_OVERFLOW;
-            if (b == 0x16 && count >= 11)
-            {
+            response[responseIndex++] = _serial.read();
 
-                debugPrintHexFrame("Received GET address response: ", buffer, count);
-
-                if (count == 11 && buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
-                    buffer[3] == 0x68 && buffer[6] == 0xD2 && buffer[10] == 0x16)
-                {
-                    uint8_t calc = calculateFCS(buffer, 4, 8);
-                    if (calc == buffer[9])
-                    {
-                        *deviceaddress = buffer[8];
-                        return ERR_OK;
-                    }
-                    return ERR_COMMAND_RX_FRAME_DAMAGED;
-                }
-                return ERR_COMMAND_RX_FRAME_DAMAGED;
-            }
+            if (response[responseIndex - 1] == 0x16)
+                break;
         }
     }
 
-    return ERR_COMMAND_NO_DATA_RECEIVED;
+    debugPrintHexFrame("Received GET address response: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 11)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
+        response[3] != 0x68 || response[6] != 0xD2 || response[10] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 11)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 8);
+        if (response[9] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    *deviceaddress = response[8];
+    return ERR_OK;
 }
 
 /***************************************************************
@@ -2238,6 +2288,11 @@ iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t des
 
 iSYSResult_t iSYS4001::iSYS_startAcquisition(uint8_t destAddress, uint32_t timeout)
 {
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
     iSYSResult_t res = sendAcquisitionCommand(destAddress, true);
     if (res != ERR_OK)
     {
@@ -2257,6 +2312,10 @@ iSYSResult_t iSYS4001::iSYS_startAcquisition(uint8_t destAddress, uint32_t timeo
 
 iSYSResult_t iSYS4001::iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeout)
 {
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
 
     iSYSResult_t res = sendAcquisitionCommand(destAddress, false);
     if (res != ERR_OK)
@@ -2299,8 +2358,14 @@ iSYSResult_t iSYS4001::sendAcquisitionCommand(uint8_t destAddress, bool start)
     }
     debugPrintHexFrame("", command, 11);
 
-    _serial.write(command, 11);
+    size_t bytesWritten = _serial.write(command, 11);
     _serial.flush();
+
+    if (bytesWritten != 11)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
     return ERR_OK;
 }
 
@@ -2311,53 +2376,50 @@ iSYSResult_t iSYS4001::receiveAcquisitionAcknowledgement(uint8_t destAddress, ui
         return ERR_TIMEOUT;
     }
 
+    uint8_t response[9];
+    size_t responseIndex = 0;
     uint32_t startTime = millis();
-    uint8_t buffer[9];
-    uint16_t index = 0;
-    uint8_t byte;
 
-    while ((millis() - startTime) < timeout)
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
     {
         if (_serial.available())
         {
-            byte = _serial.read();
-            buffer[index++] = byte;
+            response[responseIndex++] = _serial.read();
 
-            if (byte == 0x16 && index >= 9)
-            {
-
-                debugPrintHexFrame("", buffer, index);
-
-                if (index == 9 &&
-                    buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
-                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
-                    buffer[6] == 0xD1 && buffer[8] == 0x16)
-                {
-
-                    uint8_t expectedFCS = calculateFCS(buffer, 4, 6);
-                    if (buffer[7] == expectedFCS)
-                    {
-                        return ERR_OK;
-                    }
-                    else
-                    {
-                        return ERR_INVALID_CHECKSUM;
-                    }
-                }
-                else
-                {
-                    return ERR_COMMAND_RX_FRAME_DAMAGED;
-                }
-            }
-
-            if (index > 9)
-            {
-                return ERR_COMMAND_MAX_DATA_OVERFLOW;
-            }
+            if (response[responseIndex - 1] == 0x16)
+                break;
         }
     }
 
-    return ERR_COMMAND_NO_DATA_RECEIVED;
+    debugPrintHexFrame("Received acquisition acknowledgement: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 9)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD1 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 9)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6);
+        if (response[7] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    return ERR_OK;
 }
 
 /***************************************************************
