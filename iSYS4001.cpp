@@ -14,25 +14,26 @@ iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
  * Overview
  *  - Configure library-level debug logging and helper printing.
  *  - You can set the output Stream (e.g., Serial) and enable/disable logging.
- *  - Helper methods (`debugPrint`, `debugPrintln`, `debugPrintHexFrame`) respect
+ *  - Helper methods (`debugPrint`, `debugPrintHexFrame`) respect
  *    the enabled flag and return a status so callers can check for issues.
  *
  * Functions
- *  - setDebugEnabled(bool enabled)
  *  - setDebug(Stream &stream, bool enabled)
- *  - setDebugStream(Stream &stream)
- *  - debugPrint(const char*), debugPrintln(const char*), debugPrintHexFrame(const char* prefix, const uint8_t* data, size_t length)
+ *  - debugPrint(const char*, bool newline = false)
+ *  - debugPrintHexFrame(const char* prefix, const uint8_t* data, size_t length)
  *
  * Parameters
  *  - enabled:   turn library debug on/off
  *  - stream:    any Arduino Stream (Serial, Serial1, SoftwareSerial, etc.)
+ *  - msg:       message to print (can be nullptr)
+ *  - newline:   whether to add newline after message (default: false)
  *  - prefix:    optional text before hex frame output (can be nullptr)
  *  - data:      pointer to bytes to print as hex (can be nullptr if length == 0)
  *  - length:    number of bytes in data
  *
  * Return (iSYSResult_t)
- *  - setDebug, setDebugStream: ERR_OK, or ERR_NULL_POINTER if stream is invalid
- *  - debugPrint, debugPrintln, debugPrintHexFrame:
+ *  - setDebug: ERR_OK, or ERR_NULL_POINTER if stream is invalid
+ *  - debugPrint, debugPrintHexFrame:
  *      - ERR_OK on successful print
  *      - ERR_COMMAND_NO_DATA_RECEIVED if debug is disabled or stream not set
  *      - ERR_NULL_POINTER if message/data pointer is null (and length > 0 for hex)
@@ -43,20 +44,9 @@ iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
  *
  * Usage example
  *  radar.setDebug(Serial, true);
- *  radar.debugPrintln("Radar debug enabled");
+ *  radar.debugPrint("Radar debug enabled", true);  // with newline
+ *  radar.debugPrint("Debug: ");                     // without newline
  */
-iSYSResult_t iSYS4001::setDebugEnabled(bool enabled)
-{
-    _debugEnabled = enabled;
-    return ERR_OK;
-}
-
-iSYSResult_t iSYS4001::setDebugStream(Stream &stream)
-{
-    _debugStream = &stream;
-    return (_debugStream != nullptr) ? ERR_OK : ERR_NULL_POINTER;
-}
-
 iSYSResult_t iSYS4001::setDebug(Stream &stream, bool enabled)
 {
     _debugStream = &stream;
@@ -65,7 +55,7 @@ iSYSResult_t iSYS4001::setDebug(Stream &stream, bool enabled)
 }
 
 // Internal debug helpers
-iSYSResult_t iSYS4001::debugPrint(const char *msg)
+iSYSResult_t iSYS4001::debugPrint(const char *msg, bool newline)
 {
     if (!(_debugEnabled && _debugStream))
     {
@@ -75,21 +65,14 @@ iSYSResult_t iSYS4001::debugPrint(const char *msg)
     {
         return ERR_NULL_POINTER;
     }
-    _debugStream->print(msg);
-    return ERR_OK;
-}
-
-iSYSResult_t iSYS4001::debugPrintln(const char *msg)
-{
-    if (!(_debugEnabled && _debugStream))
+    if (newline)
     {
-        return ERR_COMMAND_NO_DATA_RECEIVED;
+        _debugStream->println(msg);
     }
-    if (msg == nullptr)
+    else
     {
-        return ERR_NULL_POINTER;
+        _debugStream->print(msg);
     }
-    _debugStream->println(msg);
     return ERR_OK;
 }
 

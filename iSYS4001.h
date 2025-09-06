@@ -124,8 +124,6 @@ public:
     /***************************************************************
      *  DEBUG FUNCTIONS
      ***************************************************************/
-    iSYSResult_t setDebugEnabled(bool enabled);
-    iSYSResult_t setDebugStream(Stream &stream);
     iSYSResult_t setDebug(Stream &stream, bool enabled);
 
     /***************************************************************
@@ -244,8 +242,7 @@ private:
     iSYSResult_t receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
 
     // Debug helpers (return status)
-    iSYSResult_t debugPrint(const char *msg);
-    iSYSResult_t debugPrintln(const char *msg);
+    iSYSResult_t debugPrint(const char *msg, bool newline = false);
     iSYSResult_t debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length);
 };
 
