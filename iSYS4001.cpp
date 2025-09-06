@@ -2546,6 +2546,7 @@ iSYSResult_t iSYS4001::receiveSetMultipleTargetFilterAcknowledgement(uint8_t des
  *
  * Return (iSYSResult_t)
  *  - ERR_OK on success
+ *  - ERR_OUTPUT_OUT_OF_RANGE if output not in [1..3]
  *  - ERR_TIMEOUT if timeout == 0
  *  - ERR_NULL_POINTER if output pointer is null (getters)
  *  - Frame/communication errors: ERR_COMMAND_NO_DATA_RECEIVED,
@@ -2576,6 +2577,15 @@ iSYSResult_t iSYS4001::receiveSetMultipleTargetFilterAcknowledgement(uint8_t des
 
 iSYSResult_t iSYS4001::iSYS_setOutputFilterType(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress, uint32_t timeout)
 {
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
+    {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
 
     iSYSResult_t res = sendSetOutputFilterRequest(outputnumber, filter, destAddress);
     if (res != ERR_OK)
@@ -2615,21 +2625,16 @@ iSYSResult_t iSYS4001::sendSetOutputFilterRequest(iSYSOutputNumber_t outputnumbe
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Setting output filter type command to radar: ");
-    for (int i = 0; i < 13; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-        {
-            Serial.print("0");
-        }
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Setting output filter type command to radar: ", command, 13);
 
-    _serial.write(command, 13);
+    size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
     return ERR_OK;
 }
 
@@ -2642,62 +2647,69 @@ iSYSResult_t iSYS4001::receiveSetOutputFilterAcknowledgement(uint8_t destAddress
         return ERR_TIMEOUT;
     }
 
+    uint8_t response[9];
+    size_t responseIndex = 0;
     uint32_t startTime = millis();
-    uint8_t buffer[9];
-    uint16_t index = 0;
-    uint8_t byte;
 
-    // Wait for response with timeout protection
-    while ((millis() - startTime) < timeout)
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
     {
         if (_serial.available())
         {
-            byte = _serial.read();
-            buffer[index++] = byte;
+            response[responseIndex++] = _serial.read();
 
-            if (byte == 0x16 && index >= 9)
-            {
-                debugPrintHexFrame("Received output filter acknowledgement: ", buffer, index);
-
-                if (index == 9 &&
-                    buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
-                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
-                    buffer[6] == 0xD5 && buffer[8] == 0x16)
-                {
-                    uint8_t expectedFCS = calculateFCS(buffer, 4, 6);
-                    if (buffer[7] == expectedFCS)
-                    {
-                        return ERR_OK;
-                    }
-                    else
-                    {
-                        return ERR_INVALID_CHECKSUM;
-                    }
-                }
-                else
-                {
-                    return ERR_COMMAND_RX_FRAME_DAMAGED;
-                }
-            }
-
-            if (index > 9)
-            {
-                return ERR_COMMAND_MAX_DATA_OVERFLOW;
-            }
+            if (response[responseIndex - 1] == 0x16)
+                break;
         }
     }
 
-    return ERR_COMMAND_NO_DATA_RECEIVED;
+    debugPrintHexFrame("Received output filter acknowledgement: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 9)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD5 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 9)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6);
+        if (response[7] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    return ERR_OK;
 }
 
 //``````````````````````````````````````````````````````````` GET OUTPUT FILTER TYPE FUNCTION ```````````````````````````````````````````````````````````//
 
 iSYSResult_t iSYS4001::iSYS_getOutputFilterType(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout)
 {
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
+    {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
 
     if (filter == nullptr)
     {
         return ERR_NULL_POINTER;
+    }
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
     }
 
     iSYSResult_t res = sendGetOutputFilterRequest(outputnumber, destAddress);
@@ -2719,7 +2731,6 @@ iSYSResult_t iSYS4001::iSYS_getOutputFilterType(iSYSOutputNumber_t outputnumber,
 
 iSYSResult_t iSYS4001::sendGetOutputFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
 {
-
     uint8_t command[11];
     uint8_t index = 0;
 
@@ -2737,21 +2748,16 @@ iSYSResult_t iSYS4001::sendGetOutputFilterRequest(iSYSOutputNumber_t outputnumbe
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Getting output filter type command to radar: ");
-    for (int i = 0; i < 11; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-        {
-            Serial.print("0");
-        }
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Getting output filter type command to radar: ", command, 11);
 
-    _serial.write(command, 11);
+    size_t bytesWritten = _serial.write(command, 11);
     _serial.flush();
+
+    if (bytesWritten != 11)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
     return ERR_OK;
 }
 
@@ -2764,59 +2770,66 @@ iSYSResult_t iSYS4001::receiveGetOutputFilterResponse(iSYSOutput_filter_t *filte
         return ERR_TIMEOUT;
     }
 
+    uint8_t response[11];
+    size_t responseIndex = 0;
     uint32_t startTime = millis();
-    uint8_t buffer[11];
-    uint16_t index = 0;
-    uint8_t byte;
 
-    while ((millis() - startTime) < timeout)
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
     {
         if (_serial.available())
         {
-            byte = _serial.read();
-            buffer[index++] = byte;
+            response[responseIndex++] = _serial.read();
 
-            if (byte == 0x16 && index >= 11)
-            {
-
-                debugPrintHexFrame("Received output filter response: ", buffer, index);
-
-                if (index == 11 &&
-                    buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
-                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
-                    buffer[6] == 0xD4 && buffer[7] == 0x00 && buffer[10] == 0x16)
-                {
-                    uint8_t expectedFCS = calculateFCS(buffer, 4, 8);
-                    if (buffer[9] == expectedFCS)
-                    {
-                        *filter = (iSYSOutput_filter_t)buffer[8];
-                        return ERR_OK;
-                    }
-                    else
-                    {
-                        return ERR_INVALID_CHECKSUM;
-                    }
-                }
-                else
-                {
-                    return ERR_COMMAND_RX_FRAME_DAMAGED;
-                }
-            }
-
-            if (index > 11)
-            {
-                return ERR_COMMAND_MAX_DATA_OVERFLOW;
-            }
+            if (response[responseIndex - 1] == 0x16)
+                break;
         }
     }
 
-    return ERR_COMMAND_NO_DATA_RECEIVED;
+    debugPrintHexFrame("Received output filter response: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 11)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD4 || response[7] != 0x00 || response[10] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 11)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 8);
+        if (response[9] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    *filter = (iSYSOutput_filter_t)response[8];
+    return ERR_OK;
 }
 
 //``````````````````````````````````````````````````````````` SET OUTPUT SIGNAL FILTER FUNCTION ```````````````````````````````````````````````````````````//
 
 iSYSResult_t iSYS4001::iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout)
 {
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
+    {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
 
     iSYSResult_t res = sendSetOutputSignalFilterRequest(outputnumber, signal, destAddress);
     if (res != ERR_OK)
@@ -2837,7 +2850,6 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumbe
 
 iSYSResult_t iSYS4001::sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress)
 {
-
     uint8_t command[13];
     uint8_t index = 0;
 
@@ -2859,8 +2871,14 @@ iSYSResult_t iSYS4001::sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outpu
 
     debugPrintHexFrame("Setting output signal filter command to radar: ", command, 13);
 
-    _serial.write(command, 13);
+    size_t bytesWritten = _serial.write(command, 13);
     _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
     return ERR_OK;
 }
 
@@ -2873,61 +2891,69 @@ iSYSResult_t iSYS4001::receiveSetOutputSignalFilterAcknowledgement(uint8_t destA
         return ERR_TIMEOUT;
     }
 
+    uint8_t response[9];
+    size_t responseIndex = 0;
     uint32_t startTime = millis();
-    uint8_t buffer[9];
-    uint16_t index = 0;
-    uint8_t byte;
 
-    while ((millis() - startTime) < timeout)
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
     {
         if (_serial.available())
         {
-            byte = _serial.read();
-            buffer[index++] = byte;
+            response[responseIndex++] = _serial.read();
 
-            if (byte == 0x16 && index >= 9)
-            {
-                debugPrintHexFrame("Received output signal filter acknowledgement: ", buffer, index);
-
-                if (index == 9 &&
-                    buffer[0] == 0x68 && buffer[1] == 0x03 && buffer[2] == 0x03 &&
-                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
-                    buffer[6] == 0xD5 && buffer[8] == 0x16)
-                {
-                    uint8_t expectedFCS = calculateFCS(buffer, 4, 6);
-                    if (buffer[7] == expectedFCS)
-                    {
-                        return ERR_OK;
-                    }
-                    else
-                    {
-                        return ERR_INVALID_CHECKSUM;
-                    }
-                }
-                else
-                {
-                    return ERR_COMMAND_RX_FRAME_DAMAGED;
-                }
-            }
-
-            if (index > 9)
-            {
-                return ERR_COMMAND_MAX_DATA_OVERFLOW;
-            }
+            if (response[responseIndex - 1] == 0x16)
+                break;
         }
     }
 
-    return ERR_COMMAND_NO_DATA_RECEIVED;
+    debugPrintHexFrame("Received output signal filter acknowledgement: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 9)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD5 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 9)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6);
+        if (response[7] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    return ERR_OK;
 }
 
 //``````````````````````````````````````````````````````````` GET OUTPUT SIGNAL FILTER FUNCTION ```````````````````````````````````````````````````````````//
 
 iSYSResult_t iSYS4001::iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout)
 {
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
+    {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
 
     if (signal == nullptr)
     {
         return ERR_NULL_POINTER;
+    }
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
     }
 
     iSYSResult_t res = sendGetOutputSignalFilterRequest(outputnumber, destAddress);
@@ -2949,7 +2975,6 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumbe
 
 iSYSResult_t iSYS4001::sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
 {
-
     uint8_t command[11];
     uint8_t index = 0;
 
@@ -2967,21 +2992,16 @@ iSYSResult_t iSYS4001::sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outpu
     command[index++] = fcs;
     command[index++] = 0x16;
 
-    Serial.print("Getting output signal filter command to radar: ");
-    for (int i = 0; i < 11; i++)
-    {
-        Serial.print("0x");
-        if (command[i] < 0x10)
-        {
-            Serial.print("0");
-        }
-        Serial.print(command[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
+    debugPrintHexFrame("Getting output signal filter command to radar: ", command, 11);
 
-    _serial.write(command, 11);
+    size_t bytesWritten = _serial.write(command, 11);
     _serial.flush();
+
+    if (bytesWritten != 11)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
     return ERR_OK;
 }
 
@@ -2994,53 +3014,49 @@ iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t 
         return ERR_TIMEOUT;
     }
 
+    uint8_t response[11];
+    size_t responseIndex = 0;
     uint32_t startTime = millis();
-    uint8_t buffer[11];
-    uint16_t index = 0;
-    uint8_t byte;
 
-    // Wait for response with timeout protection
-    while ((millis() - startTime) < timeout)
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
     {
         if (_serial.available())
         {
-            byte = _serial.read();
-            buffer[index++] = byte;
+            response[responseIndex++] = _serial.read();
 
-            if (byte == 0x16 && index >= 11)
-            {
-
-                debugPrintHexFrame("Received output signal filter response: ", buffer, index);
-
-                if (index == 11 &&
-                    buffer[0] == 0x68 && buffer[1] == 0x05 && buffer[2] == 0x05 &&
-                    buffer[3] == 0x68 && buffer[4] == 0x01 && buffer[5] == destAddress &&
-                    buffer[6] == 0xD4 && buffer[7] == 0x00 && buffer[10] == 0x16)
-                {
-                    uint8_t expectedFCS = calculateFCS(buffer, 4, 8);
-                    if (buffer[9] == expectedFCS)
-                    {
-
-                        *signal = (iSYSFilter_signal_t)buffer[8];
-                        return ERR_OK;
-                    }
-                    else
-                    {
-                        return ERR_INVALID_CHECKSUM;
-                    }
-                }
-                else
-                {
-                    return ERR_COMMAND_RX_FRAME_DAMAGED;
-                }
-            }
-
-            if (index > 11)
-            {
-                return ERR_COMMAND_MAX_DATA_OVERFLOW;
-            }
+            if (response[responseIndex - 1] == 0x16)
+                break;
         }
     }
 
-    return ERR_COMMAND_NO_DATA_RECEIVED;
+    debugPrintHexFrame("Received output signal filter response: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 11)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD4 || response[7] != 0x00 || response[10] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 11)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 8);
+        if (response[9] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    *signal = (iSYSFilter_signal_t)response[8];
+    return ERR_OK;
 }
