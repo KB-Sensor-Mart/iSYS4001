@@ -66,7 +66,7 @@ typedef enum iSYSOutput_filter
 typedef enum iSYSFilter_signal
 {
     ISYS_OFF = 0,
-    ISYS_VELOCITY_RADIAL,
+    ISYS_VELOCITY_RADIAL = 1,
     ISYS_RANGE_RADIAL
 } iSYSFilter_signal_t;
 
@@ -198,6 +198,12 @@ public:
     iSYSResult_t iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout);
     iSYSResult_t iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
 
+    /***************************************************************
+     *  OUTPUT MULTIPLE TARGET FILTER FUNCTIONS
+     ***************************************************************/
+
+    iSYSResult_t iSYS_setMultipleTargetFilter(iSYSOutputNumber_t outputnumber, uint8_t destAddress, uint32_t timeout);
+
 private:
     uint32_t _baud;
     HardwareSerial &_serial;
@@ -240,6 +246,13 @@ private:
     iSYSResult_t receiveSetOutputSignalFilterAcknowledgement(uint8_t destAddress, uint32_t timeout);
     iSYSResult_t sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
     iSYSResult_t receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout);
+
+    /***************************************************************
+     *  OUTPUT MULTIPLE TARGET FILTER HELPER FUNCTIONS
+     ***************************************************************/
+
+    iSYSResult_t sendSetMultipleTargetFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
+    iSYSResult_t receiveSetMultipleTargetFilterAcknowledgement(uint8_t destAddress, uint32_t timeout);
 
     // Debug helpers (return status)
     iSYSResult_t debugPrint(const char *msg, bool newline = false);

@@ -5,7 +5,6 @@ iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
 {
 }
 
-
 /***************************************************************
  *  DEBUG CONFIGURATION FUNCTIONS
  ***************************************************************/
@@ -2359,6 +2358,164 @@ iSYSResult_t iSYS4001::receiveAcquisitionAcknowledgement(uint8_t destAddress, ui
     }
 
     return ERR_COMMAND_NO_DATA_RECEIVED;
+}
+
+/***************************************************************
+ *  OUTPUT MULTIPLE TARGET FILTER FUNCTIONS
+ ***************************************************************/
+/**
+ * Overview
+ *  - Configure signal selection for multiple target filtering.
+ *  - This function specifically handles the signal parameter for filtering multiple targets.
+ *
+ * Function
+ *  - iSYS_setMultipleTargetFilter(output, destAddress, timeoutMs)
+ *
+ * Parameters
+ *  - output:     ISYS_OUTPUT_1..ISYS_OUTPUT_3
+ *  - destAddress: device UART address (e.g. 0x80)
+ *  - timeoutMs:  max wait for acknowledgement; recommend >=100 ms (300 ms typical)
+ *
+ * Return (iSYSResult_t)
+ *  - ERR_OK on success
+ *  - ERR_OUTPUT_OUT_OF_RANGE if output not in [1..3]
+ *  - ERR_TIMEOUT if timeoutMs == 0
+ *  - Frame/communication errors: ERR_COMMAND_NO_DATA_RECEIVED,
+ *    ERR_COMMAND_RX_FRAME_LENGTH, ERR_COMMAND_RX_FRAME_DAMAGED, ERR_INVALID_CHECKSUM,
+ *    ERR_COMMAND_MAX_DATA_OVERFLOW
+ *
+ * Notes
+ *  - This function is specifically for multiple target filtering.
+ *  - The signal filter is always set to ISYS_OFF for multiple target filtering.
+ *  - Persist desired configuration with saveAllSettings(dest, timeout).
+ *
+ * Usage example
+ *  iSYSResult_t r;
+ *  r = radar.iSYS_setMultipleTargetFilter(ISYS_OUTPUT_1, 0x80, 300);
+ *  if (r != ERR_OK) {
+ *      Serial.print("Multiple target filter failed: ");
+ *      Serial.println(r);
+ *  }
+ */
+
+//``````````````````````````````````````````````````````````` SET MULTIPLE TARGET FILTER FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::iSYS_setMultipleTargetFilter(iSYSOutputNumber_t outputnumber, uint8_t destAddress, uint32_t timeout)
+{
+    if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
+    {
+        return ERR_OUTPUT_OUT_OF_RANGE;
+    }
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
+    iSYSResult_t res = sendSetMultipleTargetFilterRequest(outputnumber, destAddress);
+    if (res != ERR_OK)
+    {
+        return res;
+    }
+
+    res = receiveSetMultipleTargetFilterAcknowledgement(destAddress, timeout);
+    if (res != ERR_OK)
+    {
+        return res;
+    }
+
+    return ERR_OK;
+}
+
+//``````````````````````````````````````````````````````````` SEND MULTIPLE TARGET FILTER REQUEST FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::sendSetMultipleTargetFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
+{
+    uint8_t command[13];
+    uint8_t index = 0;
+
+    command[index++] = 0x68;
+    command[index++] = 0x07;
+    command[index++] = 0x07;
+    command[index++] = 0x68;
+    command[index++] = destAddress;
+    command[index++] = 0x01;
+    command[index++] = 0xD5;
+    command[index++] = outputnumber;
+    command[index++] = 0x16;
+    command[index++] = 0x00;
+    command[index++] = (uint8_t)ISYS_OFF; // Always set to ISYS_OFF
+
+    uint8_t fcs = calculateFCS(command, 4, index - 1);
+    command[index++] = fcs;
+    command[index++] = 0x16;
+
+    debugPrintHexFrame("Setting multiple target filter command to radar: ", command, 13);
+
+    size_t bytesWritten = _serial.write(command, 13);
+    _serial.flush();
+
+    if (bytesWritten != 13)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    return ERR_OK;
+}
+
+//``````````````````````````````````````````````````````````` RECEIVE MULTIPLE TARGET FILTER ACKNOWLEDGEMENT FUNCTION ```````````````````````````````````````````````````````````//
+
+iSYSResult_t iSYS4001::receiveSetMultipleTargetFilterAcknowledgement(uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
+    uint8_t response[9];
+    size_t responseIndex = 0;
+    uint32_t startTime = millis();
+
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
+    {
+        if (_serial.available())
+        {
+            response[responseIndex++] = _serial.read();
+
+            if (response[responseIndex - 1] == 0x16)
+                break;
+        }
+    }
+
+    debugPrintHexFrame("Received multiple target filter acknowledgement: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 9)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD5 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 9)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6);
+        if (response[7] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    return ERR_OK;
 }
 
 /***************************************************************
