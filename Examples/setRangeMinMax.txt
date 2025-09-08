@@ -1,8 +1,19 @@
 /*
-  iSYS4001 Radar Sensor (Set Range Min/Max)
-  ----------------------------------------
-  Set detection range limits in meters and save application settings.
+  iSYS4001 Radar Sensor — Set Range Min/Max and Read Targets (16/32-bit)
+  ---------------------------------------------------------------------
+  This example shows how to:
+  - Configure detection range limits (minimum/maximum) for an output
+  - Persist settings (application + all settings)
+  - Enable the Multiple Target Filter
+  - Start acquisition
+  - Read back targets using both 16-bit and 32-bit list formats
+
   Wiring (ESP32): RX=16 ←→ Radar TX, TX=17 ←→ Radar RX, GND shared.
+
+  Tips:
+  - Adjust DESTINATION_ADDRESS if your device uses a different address.
+  - Call iSYS_startAcquisition() before requesting targets, otherwise you may not see data.
+  - After changing configuration (range, filters, etc.), call saveAllSettings() to persist across reboots.
 */
 
 #include "iSYS4001.h"
@@ -13,6 +24,26 @@ constexpr uint8_t DESTINATION_ADDRESS = 0x80;
 constexpr uint32_t TIMEOUT_MS = 300; // ms
 constexpr uint16_t MIN_RANGE_M = 3;   // meters
 constexpr uint16_t MAX_RANGE_M = 10; // meters
+
+// Pretty-printer for the global target list buffer
+static iSYSTargetList_t gTargetList;
+void printTargetList(const char* label) {
+  Serial.println(label);
+  if (gTargetList.error.iSYSTargetListError != TARGET_LIST_OK) {
+    Serial.print("  Error: ");
+    Serial.println(gTargetList.error.iSYSTargetListError);
+    return;
+  }
+  Serial.printf("  Targets: %u (Output %u)\n", gTargetList.nrOfTargets, gTargetList.outputNumber);
+  for (uint16_t i = 0; i < gTargetList.nrOfTargets && i < MAX_TARGETS; i++) {
+    Serial.printf("  #%u Signal=%.1f dB, Velocity=%.2f m/s, Range=%.2f m, Angle=%.1fDeg\n",
+                  i + 1,
+                  gTargetList.targets[i].signal,
+                  gTargetList.targets[i].velocity,
+                  gTargetList.targets[i].range,
+                  gTargetList.targets[i].angle);
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -62,6 +93,39 @@ void setup() {
   } else {
     Serial.printf("saveApplicationSettings failed: 0x%02X\n", r);
   }
+
+  // Enable Multiple Target Filter on Output 1 (so multiple targets can be reported)
+  {
+    iSYSResult_t res = radar.iSYS_setMultipleTargetFilter(ISYS_OUTPUT_1, DESTINATION_ADDRESS, TIMEOUT_MS);
+    if (res == ERR_OK) {
+      Serial.println("MultipleTargetFilter set on Output 1");
+    } else {
+      Serial.print("[WARN] iSYS_setMultipleTargetFilter failed: ");
+      Serial.println(res);
+    }
+  }
+
+  // Persist changes (sensor + application) to non-volatile memory
+  {
+    iSYSResult_t res = radar.saveAllSettings(DESTINATION_ADDRESS, TIMEOUT_MS);
+    if (res == ERR_OK) {
+      Serial.println("All settings saved");
+    } else {
+      Serial.print("[WARN] saveAllSettings failed: ");
+      Serial.println(res);
+    }
+  }
+
+  // Start acquisition so target lists can be retrieved
+  {
+    iSYSResult_t res = radar.iSYS_startAcquisition(DESTINATION_ADDRESS, TIMEOUT_MS);
+    if (res == ERR_OK) {
+      Serial.println("Acquisition started");
+    } else {
+      Serial.print("[WARN] iSYS_startAcquisition failed: ");
+      Serial.println(res);
+    }
+  }
   
   Serial.println("=== Setup Complete - Starting Loop ===\n");
 }
@@ -75,39 +139,30 @@ void loop() {
   // Flush UART buffer
   while (Serial2.available()) { Serial2.read(); }
 
-  // Request target list
-  Serial.println("Requesting target list...");
-  iSYSTargetList_t list;
-  iSYSResult_t res = radar.getTargetList32(&list, DESTINATION_ADDRESS, TIMEOUT_MS);
-  
-  // Retry once if failed
-  if (res != ERR_OK) {
-    Serial.printf("First attempt failed (0x%02X), retrying...\n", res);
-    res = radar.getTargetList32(&list, DESTINATION_ADDRESS, TIMEOUT_MS);
-  }
-  
-  if (res == ERR_OK) {
-    if (list.error.iSYSTargetListError == TARGET_LIST_OK) {
-      Serial.printf("Success! Found %u targets (Output %u)\n", list.nrOfTargets, list.outputNumber);
-      
-      if (list.nrOfTargets > 0) {
-        Serial.println("Target Details:");
-        for (uint16_t i = 0; i < list.nrOfTargets && i < MAX_TARGETS; i++) {
-          Serial.printf("  Target %u: Signal=%.1f dB, Velocity=%.2f m/s, Range=%.2f m, Angle=%.1fDeg\n",
-                       i + 1,
-                       list.targets[i].signal,
-                       list.targets[i].velocity,
-                       list.targets[i].range,
-                       list.targets[i].angle);
-        }
-      } else {
-        Serial.println("  No targets detected");
-      }
+  // 16-bit list (compact)
+  {
+    iSYSResult_t res16 = radar.getTargetList16(&gTargetList, DESTINATION_ADDRESS, TIMEOUT_MS, ISYS_OUTPUT_1);
+    if (res16 == ERR_OK) {
+      printTargetList("[16-bit] Target List:");
     } else {
-      Serial.printf("Target list error: %u\n", list.error.iSYSTargetListError);
+      Serial.print("[16-bit] getTargetList16 failed: ");
+      Serial.println(res16);
     }
-  } else {
-    Serial.printf("getTargetList failed: 0x%02X\n", res);
+  }
+
+  // 32-bit list (high precision)
+  {
+    iSYSResult_t res32 = radar.getTargetList32(&gTargetList, DESTINATION_ADDRESS, TIMEOUT_MS, ISYS_OUTPUT_1);
+    if (res32 != ERR_OK) {
+      Serial.printf("First 32-bit attempt failed (0x%02X), retrying...\n", res32);
+      res32 = radar.getTargetList32(&gTargetList, DESTINATION_ADDRESS, TIMEOUT_MS, ISYS_OUTPUT_1);
+    }
+    if (res32 == ERR_OK) {
+      printTargetList("[32-bit] Target List:");
+    } else {
+      Serial.print("[32-bit] getTargetList32 failed: ");
+      Serial.println(res32);
+    }
   }
 
   delay(1000); // 1 second between readings

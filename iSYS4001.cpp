@@ -1998,7 +1998,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, 
  *  SET VELOCITY DIRECTION FUNCTION
  ***************************************************************/
 /**
- * @brief Set the target direction filter for a specified output channel
+ * @brief Set the target velocity direction filter for a specified output channel
  *
  * Configures which target directions(APPROACHING, RECEDING, BOTH) are considered for the specified output channel
  * on the iSYS-4001 radar device. This allows filtering targets based on their
@@ -2118,7 +2118,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, 
 }
 
 /**
- * @brief Get the current target direction for a specified output channel
+ * @brief Get the current target velocity direction for a specified output channel
  *
  * Retrieves the current target direction (APPROACHING, RECEDING, BOTH) setting for the specified output channel
  * from the iSYS-4001 radar device. This shows which target directions are currently
