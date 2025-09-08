@@ -1,5 +1,23 @@
 #include "iSYS4001.h"
 
+/**
+ * @brief Constructor for iSYS4001 radar sensor interface
+ *
+ * Initializes the iSYS4001 radar sensor communication interface with the specified
+ * serial port and baud rate. Sets up internal state variables for debug logging
+ * and communication parameters.
+ *
+ * @param serial Reference to the HardwareSerial object for UART communication
+ * @param baud Baud rate for serial communication (115200 for iSYS-4001)
+ *
+ * @note The constructor does not establish communication with the radar device.
+ *       Use the public API functions to configure and communicate with the device.
+ *
+ * @example
+ *   // Initialize with Serial2 at 115200 baud
+ *   iSYS4001 radar(Serial2, 115200);
+ *
+ */
 iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
     : _serial(serial), _baud(baud), _debugEnabled(false), _debugStream(nullptr)
 {
@@ -9,38 +27,6 @@ iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
  *  DEBUG CONFIGURATION FUNCTIONS
  ***************************************************************/
 
-/**
- * Overview
- *  - Configure library-level debug logging and helper printing.
- *  - You can set the output Stream (e.g., Serial) and enable/disable logging.
- *  - Helper methods (`debugPrint`, `debugPrintHexFrame`) are internal and
- *    automatically respect the enabled flag - no return values needed.
- *
- * Functions
- *  - setDebug(Stream &stream, bool enabled) - public API
- *  - debugPrint(const char*, bool newline = false) - internal helper
- *  - debugPrintHexFrame(const char* prefix, const uint8_t* data, size_t length) - internal helper
- *
- * Parameters
- *  - enabled:   turn library debug on/off
- *  - stream:    any Arduino Stream (Serial, Serial1, SoftwareSerial, etc.)
- *  - msg:       message to print (can be nullptr)
- *  - newline:   whether to add newline after message (default: false)
- *  - prefix:    optional text before hex frame output (can be nullptr)
- *  - data:      pointer to bytes to print as hex (can be nullptr if length == 0)
- *  - length:    number of bytes in data
- *
- * Return (iSYSResult_t)
- *  - setDebug: ERR_OK, or ERR_NULL_POINTER if stream is invalid
- *  - debugPrint, debugPrintHexFrame: void (no return values - simplified)
- *
- * Notes
- *  - Debug output is a no-op when disabled or when no stream is configured
- *  - Internal debug helpers are optimized for performance and simplicity
- *
- * Usage example
- *  radar.setDebug(Serial, true);  // Enable debug output
- */
 iSYSResult_t iSYS4001::setDebug(Stream &stream, bool enabled)
 {
     _debugStream = &stream;
@@ -48,7 +34,25 @@ iSYSResult_t iSYS4001::setDebug(Stream &stream, bool enabled)
     return (_debugStream != nullptr) ? ERR_OK : ERR_NULL_POINTER;
 }
 
-// Internal debug helpers - simplified and efficient
+/**
+ * @brief Internal debug helper function for printing text messages
+ *
+ * Prints debug messages to the configured debug stream if debug logging is enabled.
+ * This is an internal helper function used throughout the library for debug output.
+ * The function automatically checks if debug is enabled and a valid stream is configured.
+ *
+ * @param msg Pointer to the message string to print (can be nullptr)
+ * @param newline If true, adds a newline after the message; if false, prints without newline
+ *
+ * @note This function is a no-op if debug is disabled, stream is not configured, or msg is nullptr
+ * @note Used internally by the library - not intended for direct user calls
+ *
+ * @example
+ *   // Internal usage within library functions
+ *   debugPrint("Starting communication", true);
+ *   debugPrint("Value: ", false);
+ *   debugPrint("123", true);
+ */
 void iSYS4001::debugPrint(const char *msg, bool newline)
 {
     if (_debugEnabled && _debugStream && msg)
@@ -60,6 +64,28 @@ void iSYS4001::debugPrint(const char *msg, bool newline)
     }
 }
 
+/**
+ * @brief Internal debug helper function for printing hex data frames
+ *
+ * Prints binary data as hexadecimal values to the configured debug stream.
+ * This is an internal helper function used throughout the library for debugging
+ * UART communication frames and protocol data. The function formats each byte
+ * as "0xXX " and adds a newline at the end.
+ *
+ * @param prefix Optional prefix string to print before the hex data (can be nullptr)
+ * @param data Pointer to the byte array to print as hex (can be nullptr if length is 0)
+ * @param length Number of bytes to print from the data array
+ *
+ * @note This function is a no-op if debug is disabled, stream is not configured,
+ *       or if data is nullptr while length > 0
+ * @note Used internally by the library - not intended for direct user calls
+ *
+ * @example
+ *   // Internal usage within library functions
+ *   uint8_t frame[] = {0x68, 0x05, 0x05, 0x68, 0x80};
+ *   debugPrintHexFrame("Sending command: ", frame, 5);
+ *   // Output: "Sending command: 0x68 0x05 0x05 0x68 0x80 "
+ */
 void iSYS4001::debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length)
 {
     if (!(_debugEnabled && _debugStream) || (data == nullptr && length > 0))
@@ -80,54 +106,42 @@ void iSYS4001::debugPrintHexFrame(const char *prefix, const uint8_t *data, size_
 /***************************************************************
  *  GET TARGET LIST FUNCTIONS
  ***************************************************************/
-/**
- * Overview
- *  - These APIs request the current detected targets from the iSYS-4001 radar
- *    and decode the response into a strongly-typed structure (`iSYSTargetList_t`).
- *  - Two payload formats are supported by the device:
- *      getTargetList16(...) -> 16-bit  (smaller frames)
- *      getTargetList32(...) -> 32-bit  (higher precision)
- *
- * Data model (iSYSTargetList_t)
- *  - error.iSYSTargetListError: high-level target-list condition (OK, FULL, ...)
- *  - outputNumber: which output the list belongs to (1..3)
- *  - nrOfTargets: number of valid entries populated in `targets[]`
- *  - clippingFlag: non-zero if data is clipped on the device
- *  - targets[i]: per-target values
- *      - signal (dB), velocity (m/s), range (m), angle (deg)
- *
- * Parameters
- *  - pTargetList: OUT. Pointer to structure that will receive decoded targets
- *  - destAddress: Device address on the UART bus (e.g. 0x80)
- *  - timeout:     Max time in ms to wait for a complete response frame
- *  - outputnumber: Optional output channel selector (ISYS_OUTPUT_1.._3)
- *
- * Return (iSYSResult_t)
- *  - ERR_OK: success, `pTargetList` filled
- *  - ERR_COMMAND_NO_DATA_RECEIVED: no bytes arrived before timeout
- *  - ERR_FRAME_INCOMPLETE: response ended before full frame was received
- *  - ERR_COMMAND_RX_FRAME_DAMAGED: framing did not match expected protocol
- *  - ERR_INVALID_CHECKSUM: checksum mismatch
- *  - ERR_COMMAND_MAX_DATA_OVERFLOW: response exceeded internal buffer limits
- *  - ERR_COMMAND_NO_VALID_FRAME_FOUND / ERR_COMMAND_FAILURE: protocol-level errors
- *  - ERR_TIMEOUT: invalid timeout parameter (0)
- *
- * Timing and reliability notes
- *  - The iSYS-400x cycle time is ~75 ms. Recommended minimum timeout is >=100 ms;
- *    examples here use 300 ms for robustness.
- *  - For stability, flush stale UART bytes before issuing a new request.
- *
- * Usage example
- *  iSYSTargetList_t list;
- *  iSYSResult_t res = radar.getTargetList32(&list, 0x80, 300, ISYS_OUTPUT_1);
- *  if (res == ERR_OK && list.error.iSYSTargetListError == TARGET_LIST_OK) {
- *      for (uint16_t i = 0; i < list.nrOfTargets && i < MAX_TARGETS; i++) {
- *          // use list.targets[i].signal / velocity / range / angle
- *      }
- *  }
- */
 
-//``````````````````````````````````````````````````````````` 16 BIT ```````````````````````````````````````````````````````````//
+/**
+ * @brief Retrieve 16-bit target list from radar device
+ *
+ * Requests and receives a list of detected targets from the iSYS-4001 radar
+ * using the 16-bit data format. The function first sends a target list request
+ * to the specified output channel, then waits for and parses the response into
+ * the provided iSYSTargetList_t structure.
+ *
+ * @param pTargetList Pointer to iSYSTargetList_t structure that will receive the target list data
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for target list response
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response received within timeout
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame shorter than expected
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *
+ * @note This function clears the target list structure before filling it.
+ * @note Internally, this calls sendTargetListRequest() and receiveTargetListResponse().
+ *
+ * @example
+ *   // Get 16-bit target list from output 1
+ *   iSYSTargetList_t targetList;
+ *   iSYSResult_t res = radar.getTargetList16(&targetList, 0x80, 300, ISYS_OUTPUT_1);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Number of targets: ");
+ *       Serial.println(targetList.count);
+ *   } else {
+ *       Serial.print("Failed to get target list, error: ");
+ *       Serial.println(res);
+ *   }
+ */
 iSYSResult_t iSYS4001::getTargetList16(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber)
 {
     memset(pTargetList, 0, sizeof(iSYSTargetList_t));
@@ -140,7 +154,41 @@ iSYSResult_t iSYS4001::getTargetList16(iSYSTargetList_t *pTargetList, uint8_t de
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` 32 BIT```````````````````````````````````````````````````````````//
+/**
+ * @brief Retrieve 32-bit target list from radar device
+ *
+ * Requests and receives a list of detected targets from the iSYS-4001 radar
+ * using the 32-bit data format. The function first sends a target list request
+ * to the specified output channel, then waits for and parses the response into
+ * the provided iSYSTargetList_t structure.
+ *
+ * @param pTargetList Pointer to iSYSTargetList_t structure that will receive the target list data
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for target list response
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response received within timeout
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame shorter than expected
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *
+ * @note This function clears the target list structure before filling it.
+ * @note Internally, this calls sendTargetListRequest() and receiveTargetListResponse().
+ *
+ * @example
+ *   // Get 32-bit target list from output 2
+ *   iSYSTargetList_t targetList;
+ *   iSYSResult_t res = radar.getTargetList32(&targetList, 0x80, 300, ISYS_OUTPUT_2);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Number of targets: ");
+ *       Serial.println(targetList.count);
+ *   } else {
+ *       Serial.print("Failed to get target list, error: ");
+ *       Serial.println(res);
+ *   }
+ */
 iSYSResult_t iSYS4001::getTargetList32(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber)
 {
     memset(pTargetList, 0, sizeof(iSYSTargetList_t));
@@ -153,8 +201,31 @@ iSYSResult_t iSYS4001::getTargetList32(iSYSTargetList_t *pTargetList, uint8_t de
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SEND TARGET LIST REQUEST```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to send target list request command to radar device
+ *
+ * Constructs and transmits a UART command frame to request target list data from
+ * the iSYS-4001 radar device. The command specifies the output channel and data
+ * precision (16-bit or 32-bit). This is an internal helper function used by
+ * getTargetList16() and getTargetList32().
+ *
+ * @param outputnumber Output channel to request data from (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param bitrate Data precision: 16 for 16-bit format, 32 for 32-bit format
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code if command transmission fails
+ *
+ * @note This function only sends the command - it does not wait for or process the response
+ * @note Used internally by getTargetList16() and getTargetList32() functions
+ * @note The command frame includes proper framing, address, and checksum validation
+ *
+ * @example
+ *   // Internal usage - called by getTargetList16()
+ *   iSYSResult_t res = sendTargetListRequest(ISYS_OUTPUT_1, 0x80, 16);
+ *   if (res != ERR_OK) {
+ *       // Handle error
+ *   }
+ */
 iSYSResult_t iSYS4001::sendTargetListRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress, uint8_t bitrate)
 {
 
@@ -182,7 +253,36 @@ iSYSResult_t iSYS4001::sendTargetListRequest(iSYSOutputNumber_t outputnumber, ui
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` RECEIVE AND PROCESS TARGET LIST ```````````````````````````````````````````````````````````//
+/**
+ * @brief Internal function to receive and process target list response from radar device
+ *
+ * Waits for and receives the target list response frame from the iSYS-4001 radar device.
+ * The function handles the variable-length response based on the number of detected targets
+ * and the data precision (16-bit or 32-bit). It validates the frame structure and
+ * passes the data to decodeTargetFrame() for processing.
+ *
+ * @param pTargetList Pointer to target list structure that will receive the decoded data
+ * @param timeout Maximum time in milliseconds to wait for the complete response
+ * @param bitrate Data precision: 16 for 16-bit format, 32 for 32-bit format
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response received before timeout
+ *         - ERR_FRAME_INCOMPLETE: Response frame was truncated
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Frame structure validation failed
+ *         - ERR_COMMAND_MAX_DATA_OVERFLOW: Too many targets in response
+ *
+ * @note This function handles the variable-length nature of target list responses
+ * @note Used internally by getTargetList16() and getTargetList32() functions
+ * @note The function first reads the header to determine expected response length
+ *
+ * @example
+ *   // Internal usage - called by getTargetList32()
+ *   iSYSTargetList_t targets;
+ *   iSYSResult_t res = receiveTargetListResponse(&targets, 300, 32);
+ *   if (res != ERR_OK) {
+ *       // Handle communication error
+ *   }
+ */
 iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, uint32_t timeout, uint8_t bitrate)
 {
     uint32_t startTime = millis();
@@ -238,8 +338,38 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
     return decodeTargetFrame(buffer.data(), buffer.size(), bitrate, pTargetList);
 }
 
-//``````````````````````````````````````````````````````````` DECODE TARGET FRAME ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to decode target list frame data into structured format
+ *
+ * Parses the raw UART frame data received from the radar device and extracts
+ * target information into the iSYSTargetList_t structure. Handles both 16-bit
+ * and 32-bit data formats with appropriate scaling and conversion. Validates
+ * frame structure and populates target data including signal strength, velocity,
+ * range, and angle for each detected target.
+ *
+ * @param frame_array Pointer to the raw frame data received from the device
+ * @param nrOfElements Total number of bytes in the frame array
+ * @param bitrate Data precision: 16 for 16-bit format, 32 for 32-bit format
+ * @param targetList Pointer to target list structure to populate with decoded data
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_COMMAND_NO_VALID_FRAME_FOUND: Frame structure validation failed
+ *         - ERR_COMMAND_FAILURE: Invalid number of targets in frame
+ *
+ * @note This function handles the complex frame parsing and data conversion
+ * @note Used internally by receiveTargetListResponse() function
+ * @note Supports both 16-bit (7 bytes per target) and 32-bit (14 bytes per target) formats
+ * @note Automatically handles clipping flag (0xFF) when device data is saturated
+ *
+ * @example
+ *   // Internal usage - called by receiveTargetListResponse()
+ *   uint8_t frame[100];
+ *   iSYSTargetList_t targets;
+ *   iSYSResult_t res = decodeTargetFrame(frame, 50, 32, &targets);
+ *   if (res == ERR_OK) {
+ *       // targets structure now contains decoded target data
+ *   }
+ */
 iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElements, uint8_t bitrate, iSYSTargetList_t *targetList)
 {
     uint16_t ui16_fc;
@@ -348,52 +478,39 @@ iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElem
 /***************************************************************
  *  SET/GET RANGE MIN/MAX FUNCTIONS
  ***************************************************************/
-/**
- * Overview
- *  - Configure the minimum and maximum detection range for a selected output.
- *  - Values are provided in meters. The device expects fixed-point values
- *    scaled by 0.1 m internally (handled by the library).
- *
- * Functions
- *  - iSYS_setOutputRangeMin(output, rangeMeters, destAddress, timeoutMs)
- *  - iSYS_setOutputRangeMax(output, rangeMeters, destAddress, timeoutMs)
- *  - iSYS_getOutputRangeMin(output, float* outRangeMeters, destAddress, timeoutMs)
- *  - iSYS_getOutputRangeMax(output, float* outRangeMeters, destAddress, timeoutMs)
- *
- * Parameters
- *  - output:        ISYS_OUTPUT_1..ISYS_OUTPUT_3
- *  - rangeMeters:   0..150 (min) / 0.1..150 (max) depending on function
- *  - destAddress:   device UART address (e.g. 0x80)
- *  - timeoutMs:     max wait for response, recommended >= 100 ms (300 ms used in examples)
- *  - outRangeMeters: pointer to receive the decoded range (for getters)
- *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_OUTPUT_OUT_OF_RANGE if output not in [1..3]
- *  - ERR_PARAMETER_OUT_OF_RANGE if range outside permitted limits
- *  - ERR_TIMEOUT if timeoutMs == 0
- *  - Frame/communication errors: ERR_COMMAND_NO_DATA_RECEIVED, ERR_COMMAND_RX_FRAME_LENGTH,
- *    ERR_COMMAND_RX_FRAME_DAMAGED, ERR_INVALID_CHECKSUM
- *  - ERR_NULL_POINTER if getter output pointer is null
- *
- * Notes
- *  - Internally the library converts meters to 0.1 m fixed point by multiplying by 10
- *    for the SET commands and converts back for the GET commands.
- *  - It is recommended to save application settings after changing ranges using
- *    saveApplicationSettings(destAddress, timeoutMs).
- *
- * Usage example
- *  iSYSResult_t r;
- *  r = radar.iSYS_setOutputRangeMin(ISYS_OUTPUT_1, 0,    0x80, 300);
- *  r = radar.iSYS_setOutputRangeMax(ISYS_OUTPUT_1, 150,  0x80, 300);
- *  if (r == ERR_OK) {
- *      float minM = 0, maxM = 0;
- *      radar.iSYS_getOutputRangeMin(ISYS_OUTPUT_1, &minM, 0x80, 300);
- *      radar.iSYS_getOutputRangeMax(ISYS_OUTPUT_1, &maxM, 0x80, 300);
- *  }
- */
 
-//``````````````````````````````````````````````````````````` SET RANGE MIN FUNCTION ```````````````````````````````````````````````````````````//
+/**
+ * @brief Set the minimum detection range for a specified output channel
+ *
+ * Configures the minimum detection range threshold for the specified output channel
+ * on the iSYS-4001 radar device. The range value is provided in meters and is
+ * automatically converted to the device's internal 0.1m fixed-point format.
+ *
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param range Minimum range in meters (0 to 149.9)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_PARAMETER_OUT_OF_RANGE: Range value outside valid limits
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts meters to 0.1m fixed-point format (multiply by 10)
+ * @note Changes take effect immediately but should be saved with saveApplicationSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Set minimum range to 5 meters for output 1
+ *   iSYSResult_t res = radar.iSYS_setOutputRangeMin(ISYS_OUTPUT_1, 5, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Minimum range set successfully");
+ *   }
+ */
 
 iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
 {
@@ -493,8 +610,38 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SET RANGE MAX FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Set the maximum detection range for a specified output channel
+ *
+ * Configures the maximum detection range threshold for the specified output channel
+ * on the iSYS-4001 radar device. The range value is provided in meters and is
+ * automatically converted to the device's internal 0.1m fixed-point format.
+ *
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param range Maximum range in meters (0.1 to 150.0)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_PARAMETER_OUT_OF_RANGE: Range value outside valid limits
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts meters to 0.1m fixed-point format (multiply by 10)
+ * @note Changes take effect immediately but should be saved with saveApplicationSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Set maximum range to 100 meters for output 1
+ *   iSYSResult_t res = radar.iSYS_setOutputRangeMax(ISYS_OUTPUT_1, 100, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Maximum range set successfully");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout)
 {
     if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
@@ -590,8 +737,40 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, u
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET RANGE MIN FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current minimum detection range for a specified output channel
+ *
+ * Retrieves the current minimum detection range threshold for the specified output channel
+ * from the iSYS-4001 radar device. The range value is returned in meters after automatic
+ * conversion from the device's internal 0.1m fixed-point format.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param range Pointer to float variable that will receive the minimum range in meters
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_NULL_POINTER: range pointer is null
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts from 0.1m fixed-point format to meters (divide by 10)
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current minimum range for output 1
+ *   float minRange = 0;
+ *   iSYSResult_t res = radar.iSYS_getOutputRangeMin(ISYS_OUTPUT_1, &minRange, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current minimum range: ");
+ *       Serial.print(minRange);
+ *       Serial.println(" meters");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, float *range, uint8_t destAddress, uint32_t timeout)
 {
     if (range == NULL)
@@ -680,8 +859,40 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, f
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET RANGE MAX FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current maximum detection range for a specified output channel
+ *
+ * Retrieves the current maximum detection range threshold for the specified output channel
+ * from the iSYS-4001 radar device. The range value is returned in meters after automatic
+ * conversion from the device's internal 0.1m fixed-point format.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param range Pointer to float variable that will receive the maximum range in meters
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_NULL_POINTER: range pointer is null
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts from 0.1m fixed-point format to meters (divide by 10)
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current maximum range for output 1
+ *   float maxRange = 0;
+ *   iSYSResult_t res = radar.iSYS_getOutputRangeMax(ISYS_OUTPUT_1, &maxRange, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current maximum range: ");
+ *       Serial.print(maxRange);
+ *       Serial.println(" meters");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, float *range, uint8_t destAddress, uint32_t timeout)
 {
     if (range == NULL)
@@ -773,54 +984,39 @@ iSYSResult_t iSYS4001::iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, f
 /***************************************************************
  *  SET/GET VELOCITY MIN/MAX FUNCTIONS
  ***************************************************************/
+
 /**
- * Overview
- *  - Configure velocity thresholds for a selected output.
- *  - Setters accept velocity in km/h. The device protocol uses m/s in 0.1 steps;
- *    the library converts km/h -> m/s and applies 0.1 scaling internally.
- *  - Getters return velocity in km/h.
+ * @brief Set the minimum velocity threshold for a specified output channel
  *
- * Functions
- *  - iSYS_setOutputVelocityMin(output, velocityKmh, destAddress, timeoutMs)
- *  - iSYS_setOutputVelocityMax(output, velocityKmh, destAddress, timeoutMs)
- *  - iSYS_getOutputVelocityMin(output, float* outVelocityKmh, destAddress, timeoutMs)
- *  - iSYS_getOutputVelocityMax(output, float* outVelocityKmh, destAddress, timeoutMs)
+ * Configures the minimum velocity threshold for the specified output channel
+ * on the iSYS-4001 radar device. The velocity value is provided in km/h and is
+ * automatically converted to the device's internal m/s format with 0.1m/s precision.
  *
- * Parameters
- *  - output:           ISYS_OUTPUT_1..ISYS_OUTPUT_3
- *  - velocityKmh:      Min: 0..250,  Max: 0.5..250 (km/h)
- *  - destAddress:      device UART address (e.g. 0x80)
- *  - timeoutMs:        max wait for response; recommend >=100 ms (300 ms typical)
- *  - outVelocityKmh:   pointer to receive decoded value (for getters)
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param velocity Minimum velocity in km/h (0 to 249.9)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
  *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_OUTPUT_OUT_OF_RANGE if output not in [1..3]
- *  - ERR_PARAMETER_OUT_OF_RANGE if velocity outside permitted limits
- *  - ERR_TIMEOUT if timeoutMs == 0
- *  - Frame/communication errors: ERR_COMMAND_NO_DATA_RECEIVED, ERR_COMMAND_RX_FRAME_LENGTH,
- *    ERR_COMMAND_RX_FRAME_DAMAGED, ERR_INVALID_CHECKSUM
- *  - ERR_NULL_POINTER if getter output pointer is null
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_PARAMETER_OUT_OF_RANGE: Velocity value outside valid limits
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
  *
- * Notes
- *  - Scaling (handled by library):
- *      setters: scaled = round((kmh / 3.6) * 10) → protocol units (0.1 m/s)
- *      getters: kmh = (raw / 10) * 3.6
- *  - Save application settings after changes with saveApplicationSettings().
+ * @note The function automatically converts km/h to m/s: scaled = round((kmh / 3.6) * 10)
+ * @note Changes take effect immediately but should be saved with saveApplicationSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
  *
- * Usage example
- *  iSYSResult_t r;
- *  r = radar.iSYS_setOutputVelocityMin(ISYS_OUTPUT_1, 0,    0x80, 300);
- *  r = radar.iSYS_setOutputVelocityMax(ISYS_OUTPUT_1, 120,  0x80, 300);
- *  if (r == ERR_OK) {
- *      float vmin = 0, vmax = 0;
- *      radar.iSYS_getOutputVelocityMin(ISYS_OUTPUT_1, &vmin, 0x80, 300);
- *      radar.iSYS_getOutputVelocityMax(ISYS_OUTPUT_1, &vmax, 0x80, 300);
- *  }
+ * @example
+ *   // Set minimum velocity to 5 km/h for output 1
+ *   iSYSResult_t res = radar.iSYS_setOutputVelocityMin(ISYS_OUTPUT_1, 5, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Minimum velocity set successfully");
+ *   }
  */
-
-//``````````````````````````````````````````````````````````` SET VELOCITY MIN FUNCTION ```````````````````````````````````````````````````````````//
-
 iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -917,8 +1113,38 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SET VELOCITY MAX FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Set the maximum velocity threshold for a specified output channel
+ *
+ * Configures the maximum velocity threshold for the specified output channel
+ * on the iSYS-4001 radar device. The velocity value is provided in km/h and is
+ * automatically converted to the device's internal m/s format with 0.1m/s precision.
+ *
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param velocity Maximum velocity in km/h (0.5 to 250.0)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_PARAMETER_OUT_OF_RANGE: Velocity value outside valid limits
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts km/h to m/s: scaled = round((kmh / 3.6) * 10)
+ * @note Changes take effect immediately but should be saved with saveApplicationSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Set maximum velocity to 120 km/h for output 1
+ *   iSYSResult_t res = radar.iSYS_setOutputVelocityMax(ISYS_OUTPUT_1, 120, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Maximum velocity set successfully");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -1016,8 +1242,40 @@ iSYSResult_t iSYS4001::iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET VELOCITY MIN FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current minimum velocity threshold for a specified output channel
+ *
+ * Retrieves the current minimum velocity threshold for the specified output channel
+ * from the iSYS-4001 radar device. The velocity value is returned in km/h after automatic
+ * conversion from the device's internal m/s format.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param velocity Pointer to float variable that will receive the minimum velocity in km/h
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_NULL_POINTER: velocity pointer is null
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts from m/s to km/h: kmh = (raw / 10) * 3.6
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current minimum velocity for output 1
+ *   float minVelocity = 0;
+ *   iSYSResult_t res = radar.iSYS_getOutputVelocityMin(ISYS_OUTPUT_1, &minVelocity, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current minimum velocity: ");
+ *       Serial.print(minVelocity);
+ *       Serial.println(" km/h");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber, float *velocity, uint8_t destAddress, uint32_t timeout)
 {
     if (velocity == NULL)
@@ -1105,8 +1363,40 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET VELOCITY MAX FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current maximum velocity threshold for a specified output channel
+ *
+ * Retrieves the current maximum velocity threshold for the specified output channel
+ * from the iSYS-4001 radar device. The velocity value is returned in km/h after automatic
+ * conversion from the device's internal m/s format.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param velocity Pointer to float variable that will receive the maximum velocity in km/h
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_NULL_POINTER: velocity pointer is null
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts from m/s to km/h: kmh = (raw / 10) * 3.6
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current maximum velocity for output 1
+ *   float maxVelocity = 0;
+ *   iSYSResult_t res = radar.iSYS_getOutputVelocityMax(ISYS_OUTPUT_1, &maxVelocity, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current maximum velocity: ");
+ *       Serial.print(maxVelocity);
+ *       Serial.println(" km/h");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber, float *velocity, uint8_t destAddress, uint32_t timeout)
 {
     if (velocity == NULL)
@@ -1197,51 +1487,39 @@ iSYSResult_t iSYS4001::iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber
 /***************************************************************
  *  SET/GET SIGNAL MIN/MAX FUNCTIONS
  ***************************************************************/
+
 /**
- * Overview
- *  - Configure signal strength thresholds (in dB) for a selected output.
- *  - Setters accept dB values. The protocol uses fixed-point with 0.1 dB steps;
- *    the library multiplies by 10 for transmission and divides by 10 when reading.
+ * @brief Set the minimum signal strength threshold for a specified output channel
  *
- * Functions
- *  - iSYS_setOutputSignalMin(output, signalDb, destAddress, timeoutMs)
- *  - iSYS_setOutputSignalMax(output, signalDb, destAddress, timeoutMs)
- *  - iSYS_getOutputSignalMin(output, float* outSignalDb, destAddress, timeoutMs)
- *  - iSYS_getOutputSignalMax(output, float* outSignalDb, destAddress, timeoutMs)
+ * Configures the minimum signal strength threshold for the specified output channel
+ * on the iSYS-4001 radar device. The signal value is provided in dB and is
+ * automatically converted to the device's internal 0.1dB fixed-point format.
  *
- * Parameters
- *  - output:        ISYS_OUTPUT_1..ISYS_OUTPUT_3
- *  - signalDb:      Min: 0.0..249.9 dB,  Max: 0.1..250.0 dB
- *  - destAddress:   device UART address (e.g. 0x80)
- *  - timeoutMs:     max wait for response; recommend >=100 ms (300 ms typical)
- *  - outSignalDb:   pointer to receive decoded value (for getters)
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param signal Minimum signal strength in dB (0.0 to 249.9)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
  *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_OUTPUT_OUT_OF_RANGE if output not in [1..3]
- *  - ERR_PARAMETER_OUT_OF_RANGE if signal outside permitted limits
- *  - ERR_TIMEOUT if timeoutMs == 0
- *  - Frame/communication errors: ERR_COMMAND_NO_DATA_RECEIVED, ERR_COMMAND_RX_FRAME_LENGTH,
- *    ERR_COMMAND_RX_FRAME_DAMAGED, ERR_INVALID_CHECKSUM
- *  - ERR_NULL_POINTER if getter output pointer is null
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_PARAMETER_OUT_OF_RANGE: Signal value outside valid limits
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
  *
- * Notes
- *  - Scaling (handled by library): protocol units = dB * 10 (0.1 dB steps).
- *  - Persist changes with saveApplicationSettings(destAddress, timeoutMs) if desired.
+ * @note The function automatically converts dB to 0.1dB fixed-point format (multiply by 10)
+ * @note Changes take effect immediately but should be saved with saveApplicationSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
  *
- * Usage example
- *  iSYSResult_t r;
- *  r = radar.iSYS_setOutputSignalMin(ISYS_OUTPUT_1, 0.0f,  0x80, 300);
- *  r = radar.iSYS_setOutputSignalMax(ISYS_OUTPUT_1, 50.0f, 0x80, 300);
- *  if (r == ERR_OK) {
- *      float smin = 0, smax = 0;
- *      radar.iSYS_getOutputSignalMin(ISYS_OUTPUT_1, &smin, 0x80, 300);
- *      radar.iSYS_getOutputSignalMax(ISYS_OUTPUT_1, &smax, 0x80, 300);
- *  }
+ * @example
+ *   // Set minimum signal to 10 dB for output 1
+ *   iSYSResult_t res = radar.iSYS_setOutputSignalMin(ISYS_OUTPUT_1, 10, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Minimum signal threshold set successfully");
+ *   }
  */
-
-//``````````````````````````````````````````````````````````` SET SIGNAL MIN FUNCTION ```````````````````````````````````````````````````````````//
-
 iSYSResult_t iSYS4001::iSYS_setOutputSignalMin(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -1339,8 +1617,38 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMin(iSYSOutputNumber_t outputnumber, 
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SET SIGNAL MAX FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Set the maximum signal strength threshold for a specified output channel
+ *
+ * Configures the maximum signal strength threshold for the specified output channel
+ * on the iSYS-4001 radar device. The signal value is provided in dB and is
+ * automatically converted to the device's internal 0.1dB fixed-point format.
+ *
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param signal Maximum signal strength in dB (0.1 to 250.0)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_PARAMETER_OUT_OF_RANGE: Signal value outside valid limits
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts dB to 0.1dB fixed-point format (multiply by 10)
+ * @note Changes take effect immediately but should be saved with saveApplicationSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Set maximum signal to 50 dB for output 1
+ *   iSYSResult_t res = radar.iSYS_setOutputSignalMax(ISYS_OUTPUT_1, 50, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Maximum signal threshold set successfully");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -1437,8 +1745,40 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, 
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET SIGNAL MIN FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current minimum signal strength threshold for a specified output channel
+ *
+ * Retrieves the current minimum signal strength threshold for the specified output channel
+ * from the iSYS-4001 radar device. The signal value is returned in dB after automatic
+ * conversion from the device's internal 0.1dB fixed-point format.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param signal Pointer to float variable that will receive the minimum signal strength in dB
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_NULL_POINTER: signal pointer is null
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts from 0.1dB fixed-point format to dB (divide by 10)
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current minimum signal for output 1
+ *   float minSignal = 0;
+ *   iSYSResult_t res = radar.iSYS_getOutputSignalMin(ISYS_OUTPUT_1, &minSignal, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current minimum signal: ");
+ *       Serial.print(minSignal);
+ *       Serial.println(" dB");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, float *signal, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -1518,8 +1858,40 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, 
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET SIGNAL MAX FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current maximum signal strength threshold for a specified output channel
+ *
+ * Retrieves the current maximum signal strength threshold for the specified output channel
+ * from the iSYS-4001 radar device. The signal value is returned in dB after automatic
+ * conversion from the device's internal 0.1dB fixed-point format.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param signal Pointer to float variable that will receive the maximum signal strength in dB
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_NULL_POINTER: signal pointer is null
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The function automatically converts from 0.1dB fixed-point format to dB (divide by 10)
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current maximum signal for output 1
+ *   float maxSignal = 0;
+ *   iSYSResult_t res = radar.iSYS_getOutputSignalMax(ISYS_OUTPUT_1, &maxSignal, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current maximum signal: ");
+ *       Serial.print(maxSignal);
+ *       Serial.println(" dB");
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, float *signal, uint8_t destAddress, uint32_t timeout)
 {
     if (signal == NULL)
@@ -1601,46 +1973,36 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, 
  *  SET VELOCITY DIRECTION FUNCTION
  ***************************************************************/
 /**
- * Overview
- *  - Configure which target directions are considered for a selected output:
- *      ISYS_TARGET_DIRECTION_APPROACHING, ISYS_TARGET_DIRECTION_RECEDING,
- *      or ISYS_TARGET_DIRECTION_BOTH.
- *  - You can also query the current direction setting.
+ * @brief Set the target direction filter for a specified output channel
  *
- * Functions
- *  - iSYS_setOutputDirection(output, direction, destAddress, timeoutMs)
- *  - iSYS_getOutputDirection(output, iSYSDirection_type_t* outDirection, destAddress, timeoutMs)
+ * Configures which target directions are considered for the specified output channel
+ * on the iSYS-4001 radar device. This allows filtering targets based on their
+ * movement direction relative to the radar sensor.
  *
- * Parameters
- *  - output:       ISYS_OUTPUT_1..ISYS_OUTPUT_3
- *  - direction:    one of iSYSDirection_type_t (APPROACHING, RECEDING, BOTH)
- *  - destAddress:  device UART address (e.g. 0x80)
- *  - timeoutMs:    max wait for response; recommend >=100 ms (300 ms typical)
- *  - outDirection: pointer to receive decoded value (for getter)
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param direction Target direction filter (ISYS_TARGET_DIRECTION_APPROACHING, ISYS_TARGET_DIRECTION_RECEDING, or ISYS_TARGET_DIRECTION_BOTH)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
  *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_OUTPUT_OUT_OF_RANGE if output not in [1..3]
- *  - ERR_TIMEOUT if timeoutMs == 0
- *  - Frame/communication errors: ERR_COMMAND_NO_DATA_RECEIVED, ERR_COMMAND_RX_FRAME_LENGTH,
- *    ERR_COMMAND_RX_FRAME_DAMAGED, ERR_INVALID_CHECKSUM
- *  - ERR_NULL_POINTER if getter output pointer is null
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
  *
- * Notes
- *  - Setting direction filters which targets are reported by the device for the selected output.
- *  - Persist changes with saveApplicationSettings(destAddress, timeoutMs) if desired.
+ * @note Setting direction filters which targets are reported by the device for the selected output
+ * @note Changes take effect immediately but should be saved with saveApplicationSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
  *
- * Usage example
- *  iSYSResult_t r;
- *  r = radar.iSYS_setOutputDirection(ISYS_OUTPUT_1, ISYS_TARGET_DIRECTION_BOTH, 0x80, 300);
- *  if (r == ERR_OK) {
- *      iSYSDirection_type_t dir;
- *      radar.iSYS_getOutputDirection(ISYS_OUTPUT_1, &dir, 0x80, 300);
- *  }
+ * @example
+ *   // Set output 1 to detect both approaching and receding targets
+ *   iSYSResult_t res = radar.iSYS_setOutputDirection(ISYS_OUTPUT_1, ISYS_TARGET_DIRECTION_BOTH, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Direction filter set successfully");
+ *   }
  */
-
-//``````````````````````````````````````````````````````````` SET OUTPUT DIRECTION FUNCTION ```````````````````````````````````````````````````````````//
-
 iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t direction, uint8_t destAddress, uint32_t timeout)
 {
 
@@ -1730,8 +2092,39 @@ iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, 
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET OUTPUT DIRECTION FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current target direction filter for a specified output channel
+ *
+ * Retrieves the current target direction filter setting for the specified output channel
+ * from the iSYS-4001 radar device. This shows which target directions are currently
+ * being considered for the selected output.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param direction Pointer to iSYSDirection_type_t variable that will receive the current direction filter
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_NULL_POINTER: direction pointer is null
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The returned direction value indicates which targets are currently being reported
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current direction filter for output 1
+ *   iSYSDirection_type_t currentDirection;
+ *   iSYSResult_t res = radar.iSYS_getOutputDirection(ISYS_OUTPUT_1, &currentDirection, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current direction filter: ");
+ *       Serial.println(currentDirection);
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t *direction, uint8_t destAddress, uint32_t timeout)
 {
     if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
@@ -1822,49 +2215,36 @@ iSYSResult_t iSYS4001::iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, 
 /***************************************************************
  *  EEPROM COMMAND FUNCTIONS
  ***************************************************************/
-/**
- * Overview
- *  - Persist and manage device configuration via EEPROM sub-functions.
- *  - Supported operations:
- *      ISYS_EEPROM_SET_FACTORY_SETTINGS       (restore factory defaults)
- *      ISYS_EEPROM_SAVE_SENSOR_SETTINGS       (persist sensor-side parameters)
- *      ISYS_EEPROM_SAVE_APPLICATION_SETTINGS  (persist application parameters)
- *      ISYS_EEPROM_SAVE_ALL_SETTINGS          (persist both sensor + application)
- *
- * Public convenience
- *  - setFactorySettings(dest, timeout)
- *  - saveSensorSettings(dest, timeout)
- *  - saveApplicationSettings(dest, timeout)
- *  - saveAllSettings(dest, timeout)
- *    Each calls the internal 2-step flow:
- *      1) sendEEPROMCommandFrame(subFunction, dest)
- *      2) receiveEEPROMAcknowledgement(dest, timeout)
- *
- * Parameters
- *  - dest:       device UART address (e.g. 0x80)
- *  - timeout:    max wait for ack; recommend >=100 ms (300 ms typical)
- *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_TIMEOUT if timeout == 0
- *  - ERR_COMMAND_NO_DATA_RECEIVED if no ack before timeout
- *  - ERR_COMMAND_RX_FRAME_LENGTH if ack shorter than expected
- *  - ERR_COMMAND_RX_FRAME_DAMAGED if framing bytes do not match protocol
- *  - ERR_INVALID_CHECKSUM if checksum mismatch in ack
- *
- * Notes
- *  - EEPROM writes take effect immediately after the acknowledgement.
- *  - Use factory reset with care; it reverts device configuration.
- *
- * Usage example
- *  // Save current application parameters
- *  iSYSResult_t r = radar.saveApplicationSettings(0x80, 300);
- *  if (r != ERR_OK) {
- *      Serial.print("EEPROM save failed: ");
- *      Serial.println(r);
- *  }
- */
 
+/**
+ * @brief Internal function to send EEPROM command and wait for acknowledgement
+ *
+ * Sends an EEPROM command to the iSYS-4001 radar device and waits for acknowledgement.
+ * This is an internal helper function used by the public EEPROM convenience functions
+ * (setFactorySettings, saveSensorSettings, saveApplicationSettings, saveAllSettings).
+ *
+ * @param subFunction EEPROM sub-function to execute (ISYS_EEPROM_SET_FACTORY_SETTINGS, ISYS_EEPROM_SAVE_SENSOR_SETTINGS, etc.)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note This function performs a two-step process: send command frame, then validate acknowledgement
+ * @note Used internally by public EEPROM convenience functions
+ * @note EEPROM writes take effect immediately after acknowledgement
+ *
+ * @example
+ *   // Internal usage - called by saveApplicationSettings()
+ *   iSYSResult_t res = sendEEPROMCommand(ISYS_EEPROM_SAVE_APPLICATION_SETTINGS, 0x80, 300);
+ *   if (res != ERR_OK) {
+ *       // Handle EEPROM command failure
+ *   }
+ */
 iSYSResult_t iSYS4001::sendEEPROMCommand(iSYSEEPROMSubFunction_t subFunction, uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -1887,32 +2267,133 @@ iSYSResult_t iSYS4001::sendEEPROMCommand(iSYSEEPROMSubFunction_t subFunction, ui
     return ERR_OK;
 }
 
-// Convenience function to set factory settings
+/**
+ * @brief Convenience function to restore factory default settings
+ *
+ * Restores the iSYS-4001 radar device to its factory default configuration.
+ * This will reset all sensor and application parameters to their original values.
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions
+ *
+ * @note This function permanently changes device configuration - use with care
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Restore factory settings
+ *   iSYSResult_t res = radar.setFactorySettings(0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Factory settings restored");
+ *   }
+ */
 iSYSResult_t iSYS4001::setFactorySettings(uint8_t destAddress, uint32_t timeout)
 {
     return sendEEPROMCommand(ISYS_EEPROM_SET_FACTORY_SETTINGS, destAddress, timeout);
 }
 
-// Convenience function to save sensor settings
+/**
+ * @brief Convenience function to save sensor settings to EEPROM
+ *
+ * Persists the current sensor-side parameters to the device's EEPROM memory.
+ * This ensures that sensor settings survive power cycles and device resets.
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions
+ *
+ * @note This function saves sensor-specific parameters to EEPROM
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Save sensor settings
+ *   iSYSResult_t res = radar.saveSensorSettings(0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Sensor settings saved");
+ *   }
+ */
 iSYSResult_t iSYS4001::saveSensorSettings(uint8_t destAddress, uint32_t timeout)
 {
     return sendEEPROMCommand(ISYS_EEPROM_SAVE_SENSOR_SETTINGS, destAddress, timeout);
 }
 
-// Convenience function to save application settings
+/**
+ * @brief Convenience function to save application settings to EEPROM
+ *
+ * Persists the current application-side parameters to the device's EEPROM memory.
+ * This includes range, velocity, signal, and direction settings for all outputs.
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions
+ *
+ * @note This function saves application-specific parameters to EEPROM
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Save application settings
+ *   iSYSResult_t res = radar.saveApplicationSettings(0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Application settings saved");
+ *   }
+ */
 iSYSResult_t iSYS4001::saveApplicationSettings(uint8_t destAddress, uint32_t timeout)
 {
     return sendEEPROMCommand(ISYS_EEPROM_SAVE_APPLICATION_SETTINGS, destAddress, timeout);
 }
 
-// Convenience function to save all settings (sensor + application)
+/**
+ * @brief Convenience function to save all settings to EEPROM
+ *
+ * Persists both sensor and application parameters to the device's EEPROM memory.
+ * This is equivalent to calling both saveSensorSettings() and saveApplicationSettings().
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions
+ *
+ * @note This function saves both sensor and application parameters to EEPROM
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Save all settings
+ *   iSYSResult_t res = radar.saveAllSettings(0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("All settings saved");
+ *   }
+ */
 iSYSResult_t iSYS4001::saveAllSettings(uint8_t destAddress, uint32_t timeout)
 {
     return sendEEPROMCommand(ISYS_EEPROM_SAVE_ALL_SETTINGS, destAddress, timeout);
 }
 
-//``````````````````````````````````````````````````````````` SEND EEPROM COMMAND FRAME FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to send EEPROM command frame to radar device
+ *
+ * Constructs and transmits a UART command frame for EEPROM operations to the
+ * iSYS-4001 radar device. This is an internal helper function used by
+ * sendEEPROMCommand() to send the actual command frame.
+ *
+ * @param subFunction EEPROM sub-function to execute (ISYS_EEPROM_SET_FACTORY_SETTINGS, ISYS_EEPROM_SAVE_SENSOR_SETTINGS, etc.)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code if command transmission fails
+ *
+ * @note This function only sends the command - it does not wait for or process the response
+ * @note Used internally by sendEEPROMCommand() function
+ * @note The command frame includes proper framing, address, and checksum validation
+ *
+ * @example
+ *   // Internal usage - called by sendEEPROMCommand()
+ *   iSYSResult_t res = sendEEPROMCommandFrame(ISYS_EEPROM_SAVE_APPLICATION_SETTINGS, 0x80);
+ *   if (res != ERR_OK) {
+ *       // Handle command transmission error
+ *   }
+ */
 iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunction, uint8_t destAddress)
 {
     uint8_t command[10];
@@ -1943,8 +2424,35 @@ iSYSResult_t iSYS4001::sendEEPROMCommandFrame(iSYSEEPROMSubFunction_t subFunctio
 
     return ERR_OK;
 }
-//``````````````````````````````````````````````````````````` RECEIVE EEPROM ACKNOWLEDGEMENT FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to receive EEPROM command acknowledgement from radar device
+ *
+ * Waits for and validates the acknowledgement response from the iSYS-4001 radar device
+ * after sending an EEPROM command. This is an internal helper function used by
+ * sendEEPROMCommand() to validate the command was received and processed.
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note This function validates the acknowledgement frame structure and checksum
+ * @note Used internally by sendEEPROMCommand() function
+ * @note EEPROM operations take effect immediately after acknowledgement
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Internal usage - called by sendEEPROMCommand()
+ *   iSYSResult_t res = receiveEEPROMAcknowledgement(0x80, 300);
+ *   if (res != ERR_OK) {
+ *       // Handle acknowledgement error
+ *   }
+ */
 iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2002,29 +2510,27 @@ iSYSResult_t iSYS4001::receiveEEPROMAcknowledgement(uint8_t destAddress, uint32_
  *  CALCULATE CHECKSUM FUNCTION
  ***************************************************************/
 /**
- * Overview
- *  - Compute the Frame Check Sequence (FCS) used by the iSYS-4001 protocol.
- *  - The FCS is the unsigned 8-bit sum of bytes in an inclusive range.
+ * @brief Calculate frame checksum (FCS) for radar communication
  *
- * Prototype
- *  - uint8_t calculateFCS(const uint8_t* data, uint8_t startIndex, uint8_t endIndex)
+ * Computes an additive checksum across a specified range of bytes in a frame.
+ * The checksum is used by the iSYS-4001 radar device to validate the integrity
+ * of transmitted and received command/response frames.
  *
- * Parameters
- *  - data:       pointer to the frame bytes
- *  - startIndex: first index to include in the sum (inclusive)
- *  - endIndex:   last index to include in the sum (inclusive)
+ * @param data Pointer to byte array containing the frame data
+ * @param startIndex Index of the first byte to include in the checksum
+ * @param endIndex Index of the last byte to include in the checksum
  *
- * Return
- *  - 8-bit sum of all bytes in [startIndex, endIndex]
+ * @return uint8_t The computed checksum value
  *
- * Notes
- *  - Callers must ensure indices are within bounds of the provided buffer.
- *  - This helper is used when building frames (to append FCS) and when
- *    validating responses (to compare against device-provided FCS).
+ * @note The checksum is calculated as the 8-bit sum of all bytes between
+ *       startIndex and endIndex (inclusive).
  *
- * Usage example
- *  uint8_t fcs = calculateFCS(cmd, 4, 10);
- *  cmd[11] = fcs; // append before 0x16 end-of-frame
+ * @example
+ *   // Example: calculate checksum for command frame
+ *   uint8_t command[] = {0x68, 0x05, 0x05, 0x68, 0x80, 0x01, 0xD4, 0x01, 0x16};
+ *   uint8_t fcs = radar.calculateFCS(command, 4, 7);
+ *   Serial.print("Calculated FCS: ");
+ *   Serial.println(fcs, HEX);
  */
 
 uint8_t iSYS4001::calculateFCS(const uint8_t *data, uint8_t startIndex, uint8_t endIndex)
@@ -2040,44 +2546,37 @@ uint8_t iSYS4001::calculateFCS(const uint8_t *data, uint8_t startIndex, uint8_t 
 /***************************************************************
  *  DEVICE ADDRESS FUNCTIONS
  ***************************************************************/
-/**
- * Overview
- *  - Manage the radar's device address on the UART bus.
- *  - You can set a new address and query the current address.
- *
- * Functions
- *  - iSYS_setDeviceAddress(newAddr, destAddress, timeoutMs)
- *  - iSYS_getDeviceAddress(uint8_t* outAddr, destAddress, timeoutMs)
- *
- * Parameters
- *  - newAddr:     the address to set on the device (for setter)
- *  - destAddress: current known address of the device (0x00 can be used if unknown)
- *  - timeoutMs:   max wait for acknowledgement/response; recommend >=100 ms (300 ms typical)
- *  - outAddr:     pointer to receive current address (for getter)
- *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_NULL_POINTER if outAddr is null (getter)
- *  - ERR_COMMAND_NO_DATA_RECEIVED if no response before timeout
- *  - ERR_COMMAND_RX_FRAME_LENGTH if response length is shorter than expected
- *  - ERR_COMMAND_RX_FRAME_DAMAGED if framing does not match protocol
- *  - ERR_INVALID_CHECKSUM if checksum mismatch
- *  - ERR_COMMAND_MAX_DATA_OVERFLOW if internal buffer would overflow
- *
- * Notes
- *  - After setting a new address, subsequent communications must use the new address.
- *  - Consider persisting configuration with EEPROM commands if required by your workflow.
- *
- * Usage example
- *  // Set address to 0x81, communicating to current device at 0x80
- *  iSYSResult_t r = radar.iSYS_setDeviceAddress(0x81, 0x80, 300);
- *  if (r == ERR_OK) {
- *      uint8_t addr = 0;
- *      radar.iSYS_getDeviceAddress(&addr, 0x81, 300);
- *  }
- */
-//``````````````````````````````````````````````````````````` SET DEVICE ADDRESS FUNCTION ```````````````````````````````````````````````````````````//
 
+/**
+ * @brief Set the device address for the radar sensor
+ *
+ * Changes the UART address of the iSYS-4001 radar device. This allows multiple
+ * radar devices to be connected to the same UART bus with unique addresses.
+ * After setting a new address, all subsequent communications must use the new address.
+ *
+ * @param deviceaddress New device address to set (typically 0x80-0xFF)
+ * @param destAddress Current known address of the device (0x00 can be used if unknown)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note After setting a new address, subsequent communications must use the new address
+ * @note Consider persisting configuration with EEPROM commands if required
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Set device address to 0x81, communicating to current device at 0x80
+ *   iSYSResult_t res = radar.iSYS_setDeviceAddress(0x81, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Device address changed to 0x81");
+ *       // Now use 0x81 for all subsequent communications
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2160,8 +2659,37 @@ iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t dest
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET DEVICE ADDRESS FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current device address of the radar sensor
+ *
+ * Retrieves the current UART address of the iSYS-4001 radar device. This is useful
+ * for discovering the address of a device when it's unknown, or for verification
+ * after setting a new address.
+ *
+ * @param deviceaddress Pointer to uint8_t variable that will receive the current device address
+ * @param destAddress Current known address of the device (0x00 can be used if unknown)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_NULL_POINTER: deviceaddress pointer is null
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note This function can be used to discover the address of an unknown device
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current device address
+ *   uint8_t currentAddress = 0;
+ *   iSYSResult_t res = radar.iSYS_getDeviceAddress(&currentAddress, 0x00, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current device address: 0x");
+ *       Serial.println(currentAddress, HEX);
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t destAddress, uint32_t timeout)
 {
     if (deviceaddress == NULL)
@@ -2246,46 +2774,37 @@ iSYSResult_t iSYS4001::iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t des
 /***************************************************************
  *  ACQUISITION CONTROL FUNCTIONS
  ***************************************************************/
+
 /**
- * Overview
- *  - Control the measurement cycle of the radar (start/stop acquisition).
- *  - Public functions:
- *      iSYS_startAcquisition(destAddress, timeoutMs)
- *      iSYS_stopAcquisition(destAddress, timeoutMs)
- *    Internally these call:
- *      sendAcquisitionCommand(destAddress, true|false)
- *      receiveAcquisitionAcknowledgement(destAddress, timeoutMs)
+ * @brief Start radar acquisition on the device
  *
- * Parameters
- *  - destAddress: device UART address (e.g. 0x80)
- *  - timeoutMs:   max wait for acknowledgement; recommend >=100 ms (300 ms typical)
+ * Initiates the measurement cycle on the iSYS-4001 radar device. This function
+ * must be called before attempting to request target data or stream measurements.
+ * The device will begin actively scanning and detecting targets after this command.
  *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_TIMEOUT if timeoutMs == 0
- *  - ERR_COMMAND_NO_DATA_RECEIVED if no ack before timeout
- *  - ERR_COMMAND_RX_FRAME_LENGTH if ack shorter than expected
- *  - ERR_COMMAND_RX_FRAME_DAMAGED if framing does not match protocol
- *  - ERR_INVALID_CHECKSUM if checksum mismatch
- *  - ERR_COMMAND_MAX_DATA_OVERFLOW if response exceeds internal buffer
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
  *
- * Notes
- *  - Start acquisition before attempting to stream or repeatedly request data.
- *  - Stopping acquisition may be required before changing certain settings.
- *  - Flush stale UART bytes before issuing commands for improved reliability.
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *         - ERR_COMMAND_MAX_DATA_OVERFLOW: Response exceeds internal buffer
  *
- * Usage example
- *  iSYSResult_t r = radar.iSYS_startAcquisition(0x80, 300);
- *  if (r != ERR_OK) {
- *      Serial.print("Start acquisition failed: ");
- *      Serial.println(r);
- *  }
- *  // ... perform reads ...
- *  r = radar.iSYS_stopAcquisition(0x80, 300);
+ * @note Start acquisition before attempting to stream or repeatedly request data
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ * @note Flush stale UART bytes before issuing commands for improved reliability
+ *
+ * @example
+ *   // Start radar acquisition
+ *   iSYSResult_t res = radar.iSYS_startAcquisition(0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Radar acquisition started");
+ *       // Now can request target data
+ *   }
  */
-
-//``````````````````````````````````````````````````````````` START ACQUISITION FUNCTION ```````````````````````````````````````````````````````````//
-
 iSYSResult_t iSYS4001::iSYS_startAcquisition(uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2308,8 +2827,36 @@ iSYSResult_t iSYS4001::iSYS_startAcquisition(uint8_t destAddress, uint32_t timeo
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` STOP ACQUISITION FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Stop radar acquisition on the device
+ *
+ * Halts the measurement cycle on the iSYS-4001 radar device. This function
+ * stops the device from actively scanning and detecting targets. Stopping
+ * acquisition may be required before changing certain device settings.
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *         - ERR_COMMAND_MAX_DATA_OVERFLOW: Response exceeds internal buffer
+ *
+ * @note Stopping acquisition may be required before changing certain settings
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ * @note Flush stale UART bytes before issuing commands for improved reliability
+ *
+ * @example
+ *   // Stop radar acquisition
+ *   iSYSResult_t res = radar.iSYS_stopAcquisition(0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Radar acquisition stopped");
+ *       // Can now change device settings if needed
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2332,6 +2879,29 @@ iSYSResult_t iSYS4001::iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeou
     return ERR_OK;
 }
 
+/**
+ * @brief Internal function to send acquisition start/stop command to radar device
+ *
+ * Constructs and transmits a UART command frame to start or stop radar acquisition
+ * on the iSYS-4001 device. This is an internal helper function used by
+ * iSYS_startAcquisition() and iSYS_stopAcquisition().
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param start If true, starts acquisition; if false, stops acquisition
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code if command transmission fails
+ *
+ * @note This function only sends the command - it does not wait for or process the response
+ * @note Used internally by iSYS_startAcquisition() and iSYS_stopAcquisition() functions
+ * @note The command frame includes proper framing, address, and checksum validation
+ *
+ * @example
+ *   // Internal usage - called by iSYS_startAcquisition()
+ *   iSYSResult_t res = sendAcquisitionCommand(0x80, true);
+ *   if (res != ERR_OK) {
+ *       // Handle error
+ *   }
+ */
 iSYSResult_t iSYS4001::sendAcquisitionCommand(uint8_t destAddress, bool start)
 {
     uint8_t command[11];
@@ -2369,6 +2939,34 @@ iSYSResult_t iSYS4001::sendAcquisitionCommand(uint8_t destAddress, bool start)
     return ERR_OK;
 }
 
+/**
+ * @brief Internal function to receive acquisition command acknowledgement from radar device
+ *
+ * Waits for and validates the acknowledgement response from the iSYS-4001 radar device
+ * after sending an acquisition start/stop command. This is an internal helper function
+ * used by iSYS_startAcquisition() and iSYS_stopAcquisition().
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note This function validates the acknowledgement frame structure and checksum
+ * @note Used internally by iSYS_startAcquisition() and iSYS_stopAcquisition() functions
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Internal usage - called by iSYS_startAcquisition()
+ *   iSYSResult_t res = receiveAcquisitionAcknowledgement(0x80, 300);
+ *   if (res != ERR_OK) {
+ *       // Handle acknowledgement error
+ *   }
+ */
 iSYSResult_t iSYS4001::receiveAcquisitionAcknowledgement(uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2425,43 +3023,39 @@ iSYSResult_t iSYS4001::receiveAcquisitionAcknowledgement(uint8_t destAddress, ui
 /***************************************************************
  *  OUTPUT MULTIPLE TARGET FILTER FUNCTIONS
  ***************************************************************/
+
 /**
- * Overview
- *  - Configure signal selection for multiple target filtering.
- *  - This function specifically handles the signal parameter for filtering multiple targets.
+ * @brief Set multiple target filter for a specified output channel
  *
- * Function
- *  - iSYS_setMultipleTargetFilter(output, destAddress, timeoutMs)
+ * Configures the multiple target filtering for the specified output channel
+ * on the iSYS-4001 radar device. This function specifically handles signal
+ * selection for multiple target filtering and always sets the signal filter
+ * to ISYS_OFF for multiple target operation.
  *
- * Parameters
- *  - output:     ISYS_OUTPUT_1..ISYS_OUTPUT_3
- *  - destAddress: device UART address (e.g. 0x80)
- *  - timeoutMs:  max wait for acknowledgement; recommend >=100 ms (300 ms typical)
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
  *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_OUTPUT_OUT_OF_RANGE if output not in [1..3]
- *  - ERR_TIMEOUT if timeoutMs == 0
- *  - Frame/communication errors: ERR_COMMAND_NO_DATA_RECEIVED,
- *    ERR_COMMAND_RX_FRAME_LENGTH, ERR_COMMAND_RX_FRAME_DAMAGED, ERR_INVALID_CHECKSUM,
- *    ERR_COMMAND_MAX_DATA_OVERFLOW
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
  *
- * Notes
- *  - This function is specifically for multiple target filtering.
- *  - The signal filter is always set to ISYS_OFF for multiple target filtering.
- *  - Persist desired configuration with saveAllSettings(dest, timeout).
+ * @note This function is specifically for multiple target filtering
+ * @note The signal filter is always set to ISYS_OFF for multiple target filtering
+ * @note Changes take effect immediately but should be saved with saveAllSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
  *
- * Usage example
- *  iSYSResult_t r;
- *  r = radar.iSYS_setMultipleTargetFilter(ISYS_OUTPUT_1, 0x80, 300);
- *  if (r != ERR_OK) {
- *      Serial.print("Multiple target filter failed: ");
- *      Serial.println(r);
- *  }
+ * @example
+ *   // Set multiple target filter for output 1
+ *   iSYSResult_t res = radar.iSYS_setMultipleTargetFilter(ISYS_OUTPUT_1, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Multiple target filter set successfully");
+ *   }
  */
-
-//``````````````````````````````````````````````````````````` SET MULTIPLE TARGET FILTER FUNCTION ```````````````````````````````````````````````````````````//
-
 iSYSResult_t iSYS4001::iSYS_setMultipleTargetFilter(iSYSOutputNumber_t outputnumber, uint8_t destAddress, uint32_t timeout)
 {
     if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
@@ -2489,8 +3083,30 @@ iSYSResult_t iSYS4001::iSYS_setMultipleTargetFilter(iSYSOutputNumber_t outputnum
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SEND MULTIPLE TARGET FILTER REQUEST FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to send multiple target filter request to radar device
+ *
+ * Constructs and transmits a UART command frame to set multiple target filtering
+ * for the specified output channel on the iSYS-4001 radar device. This is an
+ * internal helper function used by iSYS_setMultipleTargetFilter().
+ *
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code if command transmission fails
+ *
+ * @note This function only sends the command - it does not wait for or process the response
+ * @note Used internally by iSYS_setMultipleTargetFilter() function
+ * @note The signal filter is always set to ISYS_OFF for multiple target filtering
+ * @note The command frame includes proper framing, address, and checksum validation
+ *
+ * @example
+ *   // Internal usage - called by iSYS_setMultipleTargetFilter()
+ *   iSYSResult_t res = sendSetMultipleTargetFilterRequest(ISYS_OUTPUT_1, 0x80);
+ *   if (res != ERR_OK) {
+ *       // Handle command transmission error
+ *   }
+ */
 iSYSResult_t iSYS4001::sendSetMultipleTargetFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
 {
     uint8_t command[13];
@@ -2525,8 +3141,34 @@ iSYSResult_t iSYS4001::sendSetMultipleTargetFilterRequest(iSYSOutputNumber_t out
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` RECEIVE MULTIPLE TARGET FILTER ACKNOWLEDGEMENT FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to receive multiple target filter acknowledgement from radar device
+ *
+ * Waits for and validates the acknowledgement response from the iSYS-4001 radar device
+ * after sending a multiple target filter command. This is an internal helper function
+ * used by iSYS_setMultipleTargetFilter().
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note This function validates the acknowledgement frame structure and checksum
+ * @note Used internally by iSYS_setMultipleTargetFilter() function
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Internal usage - called by iSYS_setMultipleTargetFilter()
+ *   iSYSResult_t res = receiveSetMultipleTargetFilterAcknowledgement(0x80, 300);
+ *   if (res != ERR_OK) {
+ *       // Handle acknowledgement error
+ *   }
+ */
 iSYSResult_t iSYS4001::receiveSetMultipleTargetFilterAcknowledgement(uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2583,60 +3225,39 @@ iSYSResult_t iSYS4001::receiveSetMultipleTargetFilterAcknowledgement(uint8_t des
 /***************************************************************
  *  OUTPUT SINGLE TARGET FILTER FUNCTIONS
  ***************************************************************/
+
 /**
- * Overview
- *  - Configure and query per-output filtering for the single-target output.
- *  - Two dimensions are supported:
- *      1) Output filter type: highest signal, mean, median, min, max
- *      2) Output signal selection: off, velocity radial, range radial
+ * @brief Set the output filter type for single target filtering
  *
- * Functions
- *  - Set/get filter type:
- *      iSYS_setOutputFilter(...)
- *      iSYS_getOutputFilter(...)
- *  - Set/get signal selection:
- *      iSYS_setOutputSignalFilter(...)
- *      iSYS_getOutputSignalFilter(...)
+ * Configures the filter type for single target output on the specified output channel
+ * of the iSYS-4001 radar device. This determines how multiple targets are processed
+ * to produce a single output value (highest signal, mean, median, min, or max).
  *
- * Parameters
- *  - output:     ISYS_OUTPUT_1..ISYS_OUTPUT_3
- *  - filter:     one of iSYSOutput_filter_t (HIGHEST_SIGNAL, MEAN, MEDIAN, MIN, MAX)
- *  - signal:     one of iSYSFilter_signal_t (ISYS_OFF, ISYS_VELOCITY_RADIAL, ISYS_RANGE_RADIAL)
- *  - dest:       device UART address (e.g. 0x80)
- *  - timeout:    max wait for acknowledgement/response; recommend >=100 ms (300 ms typical)
- *  - outFilter/outSignal: pointers to receive decoded values (for getters)
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param filter Filter type (ISYS_OUTPUT_FILTER_HIGHEST_SIGNAL, ISYS_OUTPUT_FILTER_MEAN, ISYS_OUTPUT_FILTER_MEDIAN, ISYS_OUTPUT_FILTER_MIN, or ISYS_OUTPUT_FILTER_MAX)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
  *
- * Return (iSYSResult_t)
- *  - ERR_OK on success
- *  - ERR_OUTPUT_OUT_OF_RANGE if output not in [1..3]
- *  - ERR_TIMEOUT if timeout == 0
- *  - ERR_NULL_POINTER if output pointer is null (getters)
- *  - Frame/communication errors: ERR_COMMAND_NO_DATA_RECEIVED,
- *    ERR_COMMAND_RX_FRAME_LENGTH, ERR_COMMAND_RX_FRAME_DAMAGED, ERR_INVALID_CHECKSUM,
- *    ERR_COMMAND_MAX_DATA_OVERFLOW
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
  *
- * Notes
- *  - Set operations are a two-step process: send request frame, then validate ack.
- *  - Persist desired configuration with saveAllSettings(dest, timeout).
- *  - When using HIGHEST_SIGNAL as the filter type, you do not need to call
- *    iSYS_setOutputSignalFilter(); the signal selection is not required.
+ * @note This function configures how multiple targets are processed for single target output
+ * @note When using HIGHEST_SIGNAL, signal selection is not required
+ * @note Changes take effect immediately but should be saved with saveAllSettings()
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
  *
- * Usage example
- *  iSYSResult_t r;
- *  r = radar.iSYS_setOutputFilter(ISYS_OUTPUT_1, ISYS_OUTPUT_FILTER_MEDIAN, 0x80, 300);
- *  if (r == ERR_OK) {
- *      iSYSOutput_filter_t current;
- *      radar.iSYS_getOutputFilter(ISYS_OUTPUT_1, &current, 0x80, 300);
- *  }
- *  r = radar.iSYS_setOutputSignalFilter(ISYS_OUTPUT_1, ISYS_VELOCITY_RADIAL, 0x80, 300);
- *  if (r == ERR_OK) {
- *      iSYSFilter_signal_t sig;
- *      radar.iSYS_getOutputSignalFilter(ISYS_OUTPUT_1, &sig, 0x80, 300);
- *  }
+ * @example
+ *   // Set output 1 to use median filter for single target output
+ *   iSYSResult_t res = radar.iSYS_setOutputFilterType(ISYS_OUTPUT_1, ISYS_OUTPUT_FILTER_MEDIAN, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Output filter type set successfully");
+ *   }
  */
-
-//``````````````````````````````````````````````````````````` SET OUTPUT FILTER TYPE FUNCTION ```````````````````````````````````````````````````````````//
-
 iSYSResult_t iSYS4001::iSYS_setOutputFilterType(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress, uint32_t timeout)
 {
     if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
@@ -2664,8 +3285,30 @@ iSYSResult_t iSYS4001::iSYS_setOutputFilterType(iSYSOutputNumber_t outputnumber,
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SEND OUTPUT FILTER TYPE REQUEST FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to send output filter type request to radar device
+ *
+ * Constructs and transmits a UART command frame to set the output filter type
+ * for single target filtering on the specified output channel of the iSYS-4001
+ * radar device. This is an internal helper function used by iSYS_setOutputFilterType().
+ *
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param filter Filter type (ISYS_OUTPUT_FILTER_HIGHEST_SIGNAL, ISYS_OUTPUT_FILTER_MEAN, ISYS_OUTPUT_FILTER_MEDIAN, ISYS_OUTPUT_FILTER_MIN, or ISYS_OUTPUT_FILTER_MAX)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code if command transmission fails
+ *
+ * @note This function only sends the command - it does not wait for or process the response
+ * @note Used internally by iSYS_setOutputFilterType() function
+ * @note The command frame includes proper framing, address, and checksum validation
+ *
+ * @example
+ *   // Internal usage - called by iSYS_setOutputFilterType()
+ *   iSYSResult_t res = sendSetOutputFilterRequest(ISYS_OUTPUT_1, ISYS_OUTPUT_FILTER_MEDIAN, 0x80);
+ *   if (res != ERR_OK) {
+ *       // Handle command transmission error
+ *   }
+ */
 iSYSResult_t iSYS4001::sendSetOutputFilterRequest(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t filter, uint8_t destAddress)
 {
     uint8_t command[13];
@@ -2700,8 +3343,34 @@ iSYSResult_t iSYS4001::sendSetOutputFilterRequest(iSYSOutputNumber_t outputnumbe
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` RECEIVE OUTPUT FILTER TYPE ACKNOWLEDGEMENT FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to receive output filter type acknowledgement from radar device
+ *
+ * Waits for and validates the acknowledgement response from the iSYS-4001 radar device
+ * after sending an output filter type command. This is an internal helper function
+ * used by iSYS_setOutputFilterType().
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note This function validates the acknowledgement frame structure and checksum
+ * @note Used internally by iSYS_setOutputFilterType() function
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Internal usage - called by iSYS_setOutputFilterType()
+ *   iSYSResult_t res = receiveSetOutputFilterAcknowledgement(0x80, 300);
+ *   if (res != ERR_OK) {
+ *       // Handle acknowledgement error
+ *   }
+ */
 iSYSResult_t iSYS4001::receiveSetOutputFilterAcknowledgement(uint8_t destAddress, uint32_t timeout)
 {
     if (timeout == 0)
@@ -2755,8 +3424,39 @@ iSYSResult_t iSYS4001::receiveSetOutputFilterAcknowledgement(uint8_t destAddress
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET OUTPUT FILTER TYPE FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current output filter type for single target filtering
+ *
+ * Retrieves the current filter type setting for single target output on the
+ * specified output channel from the iSYS-4001 radar device. This shows how
+ * multiple targets are currently being processed to produce a single output value.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param filter Pointer to iSYSOutput_filter_t variable that will receive the current filter type
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_NULL_POINTER: filter pointer is null
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The returned filter value indicates how multiple targets are processed for single target output
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current filter type for output 1
+ *   iSYSOutput_filter_t currentFilter;
+ *   iSYSResult_t res = radar.iSYS_getOutputFilterType(ISYS_OUTPUT_1, &currentFilter, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current filter type: ");
+ *       Serial.println(currentFilter);
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputFilterType(iSYSOutputNumber_t outputnumber, iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout)
 {
     if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
@@ -2789,8 +3489,29 @@ iSYSResult_t iSYS4001::iSYS_getOutputFilterType(iSYSOutputNumber_t outputnumber,
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SEND OUTPUT FILTER TYPE REQUEST FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Internal function to send get output filter type request to radar device
+ *
+ * Constructs and transmits a UART command frame to request the current output filter type
+ * setting for single target filtering on the specified output channel of the iSYS-4001
+ * radar device. This is an internal helper function used by iSYS_getOutputFilterType().
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code if command transmission fails
+ *
+ * @note This function only sends the command - it does not wait for or process the response
+ * @note Used internally by iSYS_getOutputFilterType() function
+ * @note The command frame includes proper framing, address, and checksum validation
+ *
+ * @example
+ *   // Internal usage - called by iSYS_getOutputFilterType()
+ *   iSYSResult_t res = sendGetOutputFilterRequest(ISYS_OUTPUT_1, 0x80);
+ *   if (res != ERR_OK) {
+ *       // Handle command transmission error
+ *   }
+ */
 iSYSResult_t iSYS4001::sendGetOutputFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
 {
     uint8_t command[11];
@@ -2823,7 +3544,42 @@ iSYSResult_t iSYS4001::sendGetOutputFilterRequest(iSYSOutputNumber_t outputnumbe
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` RECEIVE OUTPUT FILTER TYPE RESPONSE FUNCTION ```````````````````````````````````````````````````````````//
+/**
+ * @brief Receive and parse output filter type response from radar
+ *
+ * Waits for and validates the response frame from the iSYS-4001 radar device
+ * after sending a request for the current output filter type. The function
+ * extracts the filter type from the response and returns it via the provided
+ * pointer.
+ *
+ * @param filter Pointer to iSYSOutput_filter_t variable that will receive the current output filter type
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_TIMEOUT: Timeout parameter is zero
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response received within timeout
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame shorter than expected
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note This function should be called after sending the corresponding
+ *       request function (sendGetOutputFilterRequest()).
+ * @note The received filter value indicates which type of output filtering
+ *       is currently active on the device.
+ *
+ * @example
+ *   // Receive and process response for output filter type
+ *   iSYSOutput_filter_t currentFilter;
+ *   iSYSResult_t res = radar.receiveGetOutputFilterResponse(&currentFilter, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Output filter type received: ");
+ *       Serial.println(currentFilter);
+ *   } else {
+ *       Serial.print("Error receiving filter type: ");
+ *       Serial.println(res);
+ *   }
+ */
 
 iSYSResult_t iSYS4001::receiveGetOutputFilterResponse(iSYSOutput_filter_t *filter, uint8_t destAddress, uint32_t timeout)
 {
@@ -2879,7 +3635,40 @@ iSYSResult_t iSYS4001::receiveGetOutputFilterResponse(iSYSOutput_filter_t *filte
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SET OUTPUT SIGNAL FILTER FUNCTION ```````````````````````````````````````````````````````````//
+/**
+ * @brief Set the output signal filter for a channel
+ *
+ * Sends a request to the iSYS-4001 radar device to configure the signal filter
+ * type for a specified output channel, and waits for the acknowledgement frame
+ * to confirm successful application of the setting.
+ *
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param signal Desired signal filter type to set (value from iSYSFilter_signal_t)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_TIMEOUT: Timeout parameter is zero
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: Failed to send request or no acknowledgement received
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Acknowledgement frame shorter than expected
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Acknowledgement frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Acknowledgement checksum validation failed
+ *
+ * @note This is a high-level function that internally calls
+ *       sendSetOutputSignalFilterRequest() and
+ *       receiveSetOutputSignalFilterAcknowledgement().
+ *
+ * @example
+ *   // Set output 2 to use HIGHEST_SIGNAL filter type
+ *   iSYSResult_t res = radar.iSYS_setOutputSignalFilter(ISYS_OUTPUT_2, ISYS_FILTER_SIGNAL_HIGHEST, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Output signal filter successfully configured");
+ *   } else {
+ *       Serial.print("Failed to set output signal filter, error: ");
+ *       Serial.println(res);
+ *   }
+ */
 
 iSYSResult_t iSYS4001::iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress, uint32_t timeout)
 {
@@ -2908,7 +3697,39 @@ iSYSResult_t iSYS4001::iSYS_setOutputSignalFilter(iSYSOutputNumber_t outputnumbe
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SEND OUTPUT SIGNAL FILTER REQUEST FUNCTION ```````````````````````````````````````````````````````````//
+/**
+ * @brief Send request to set the output signal filter for a channel
+ *
+ * Constructs and transmits a command frame to the iSYS-4001 radar device
+ * instructing it to change the signal filter setting for the specified
+ * output channel. The radar should reply with an acknowledgement frame,
+ * which must be validated using receiveSetOutputSignalFilterAcknowledgement().
+ *
+ * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param signal Desired signal filter type to set (value from iSYSFilter_signal_t)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: Failed to write full request frame to serial
+ *
+ * @note This function only sends the request; the acknowledgement must be
+ *       received separately to confirm success.
+ *
+ * @example
+ *   // Set signal filter for output 1 to HIGHEST_SIGNAL
+ *   iSYSResult_t res = radar.sendSetOutputSignalFilterRequest(ISYS_OUTPUT_1, ISYS_FILTER_SIGNAL_HIGHEST, 0x80);
+ *   if (res == ERR_OK) {
+ *       // Wait for acknowledgement
+ *       res = radar.receiveSetOutputSignalFilterAcknowledgement(0x80, 300);
+ *       if (res == ERR_OK) {
+ *           Serial.println("Signal filter successfully updated");
+ *       } else {
+ *           Serial.println("Failed to receive acknowledgement");
+ *       }
+ *   } else {
+ *       Serial.println("Failed to send set filter command");
+ *   }
+ */
 
 iSYSResult_t iSYS4001::sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t signal, uint8_t destAddress)
 {
@@ -2944,7 +3765,36 @@ iSYSResult_t iSYS4001::sendSetOutputSignalFilterRequest(iSYSOutputNumber_t outpu
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` RECEIVE OUTPUT SIGNAL FILTER ACKNOWLEDGEMENT FUNCTION ```````````````````````````````````````````````````````````//
+/**
+ * @brief Receive and validate acknowledgement for setting output signal filter
+ *
+ * Waits for and parses the acknowledgement frame from the iSYS-4001 radar device
+ * after sending a "set output signal filter" command. The acknowledgement
+ * confirms that the radar has accepted and applied the requested filter change.
+ *
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_TIMEOUT: Timeout parameter is zero
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No acknowledgement received within timeout
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Acknowledgement frame shorter than expected
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Frame structure invalid (header, address, or command mismatch)
+ *         - ERR_INVALID_CHECKSUM: Acknowledgement checksum validation failed
+ *
+ * @note This function should be called after sending a set output signal filter request
+ * @note The acknowledgement frame does not return a signal value, only confirmation
+ *
+ * @example
+ *   // Receive acknowledgement after setting signal filter
+ *   iSYSResult_t res = radar.receiveSetOutputSignalFilterAcknowledgement(0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Signal filter successfully set");
+ *   } else {
+ *       Serial.print("Failed to receive acknowledgement, error: ");
+ *       Serial.println(res);
+ *   }
+ */
 
 iSYSResult_t iSYS4001::receiveSetOutputSignalFilterAcknowledgement(uint8_t destAddress, uint32_t timeout)
 {
@@ -2999,8 +3849,40 @@ iSYSResult_t iSYS4001::receiveSetOutputSignalFilterAcknowledgement(uint8_t destA
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` GET OUTPUT SIGNAL FILTER FUNCTION ```````````````````````````````````````````````````````````//
-
+/**
+ * @brief Get the current output signal filter setting for single target filtering
+ *
+ * Retrieves the current signal filter setting for single target output on the
+ * specified output channel from the iSYS-4001 radar device. This shows which
+ * signal type is currently being used for filtering multiple targets.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param signal Pointer to iSYSFilter_signal_t variable that will receive the current signal filter
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for various failure conditions:
+ *         - ERR_OUTPUT_OUT_OF_RANGE: Invalid output channel number
+ *         - ERR_NULL_POINTER: signal pointer is null
+ *         - ERR_TIMEOUT: Invalid timeout parameter (0)
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response from device
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Response frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note The returned signal value indicates which signal type is used for filtering
+ * @note When using HIGHEST_SIGNAL filter type, signal selection is not required
+ * @note Recommended timeout is >= 100ms (300ms used in examples)
+ *
+ * @example
+ *   // Get current signal filter for output 1
+ *   iSYSFilter_signal_t currentSignal;
+ *   iSYSResult_t res = radar.iSYS_getOutputSignalFilter(ISYS_OUTPUT_1, &currentSignal, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Current signal filter: ");
+ *       Serial.println(currentSignal);
+ *   }
+ */
 iSYSResult_t iSYS4001::iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumber, iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout)
 {
     if (outputnumber < ISYS_OUTPUT_1 || outputnumber > ISYS_OUTPUT_3)
@@ -3033,7 +3915,29 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalFilter(iSYSOutputNumber_t outputnumbe
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` SEND OUTPUT SIGNAL FILTER REQUEST FUNCTION ```````````````````````````````````````````````````````````//
+/**
+ * @brief Send request to retrieve current output signal filter setting
+ *
+ * Constructs and transmits a request frame to the iSYS-4001 radar device asking
+ * for the current signal filter setting on the specified output channel. The
+ * radar will respond with a frame containing the active filter configuration.
+ *
+ * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: Failed to write full request frame to serial
+ *
+ * @note The response must be parsed using iSYS4001::receiveGetOutputSignalFilterResponse()
+ * @note This function only sends the request; it does not wait for or validate the response
+ *
+ * @example
+ *   // Send request to get current signal filter for output 1
+ *   iSYSResult_t res = radar.sendGetOutputSignalFilterRequest(ISYS_OUTPUT_1, 0x80);
+ *   if (res != ERR_OK) {
+ *       Serial.println("Failed to send request frame");
+ *   }
+ */
 
 iSYSResult_t iSYS4001::sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress)
 {
@@ -3067,7 +3971,40 @@ iSYSResult_t iSYS4001::sendGetOutputSignalFilterRequest(iSYSOutputNumber_t outpu
     return ERR_OK;
 }
 
-//``````````````````````````````````````````````````````````` RECEIVE OUTPUT SIGNAL FILTER RESPONSE FUNCTION ```````````````````````````````````````````````````````````//
+/**
+ * @brief Receive and parse output signal filter response from radar
+ *
+ * Waits for and validates the response frame from the iSYS-4001 radar device
+ * after sending a request for the current signal filter configuration. The
+ * function extracts the signal filter type from the response and returns it
+ * via the provided pointer.
+ *
+ * @param signal Pointer to iSYSFilter_signal_t variable that will receive the current signal filter
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_TIMEOUT: Timeout parameter is zero
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response received within timeout
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame shorter than expected
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Frame structure invalid (header, address, or command mismatch)
+ *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
+ *
+ * @note This function should be called after sendGetOutputSignalFilterRequest()
+ * @note The received signal value indicates which filter type is active on the device
+ *
+ * @example
+ *   // Receive and process response for output signal filter
+ *   iSYSFilter_signal_t currentSignal;
+ *   iSYSResult_t res = radar.receiveGetOutputSignalFilterResponse(&currentSignal, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.print("Signal filter received: ");
+ *       Serial.println(currentSignal);
+ *   } else {
+ *       Serial.print("Error receiving filter response: ");
+ *       Serial.println(res);
+ *   }
+ */
 
 iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t *signal, uint8_t destAddress, uint32_t timeout)
 {
