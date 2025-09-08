@@ -26,7 +26,30 @@ iSYS4001::iSYS4001(HardwareSerial &serial, uint32_t baud)
 /***************************************************************
  *  DEBUG CONFIGURATION FUNCTIONS
  ***************************************************************/
-
+/**
+ * @brief Enable or disable debug output for serial monitoring
+ *
+ * Sets the debug output stream and enables or disables debug messages for
+ * command/response frames sent to and received from the iSYS-4001 radar device.
+ *
+ * @param stream Reference to a Stream object (e.g., Serial) to send debug messages
+ * @param enabled Boolean flag to enable (true) or disable (false) debug output
+ *
+ * @return iSYSResult_t ERR_OK if the debug stream is successfully set, or
+ *         ERR_NULL_POINTER if the provided stream is invalid
+ *
+ * @note When debug is enabled, internal frame transmissions and receptions
+ *       will be printed to the provided stream for monitoring purposes.
+ *
+ * @example
+ *   // Enable debug output on Serial
+ *   iSYSResult_t res = radar.setDebug(Serial, true);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Debug enabled");
+ *   } else {
+ *       Serial.println("Failed to enable debug output");
+ *   }
+ */
 iSYSResult_t iSYS4001::setDebug(Stream &stream, bool enabled)
 {
     _debugStream = &stream;
@@ -204,7 +227,7 @@ iSYSResult_t iSYS4001::getTargetList32(iSYSTargetList_t *pTargetList, uint8_t de
 /**
  * @brief Internal function to send target list request command to radar device
  *
- * Constructs and transmits a UART command frame to request target list data from
+ * Constructs and transmits a command frame to request target list data from
  * the iSYS-4001 radar device. The command specifies the output channel and data
  * precision (16-bit or 32-bit). This is an internal helper function used by
  * getTargetList16() and getTargetList32().
@@ -341,7 +364,7 @@ iSYSResult_t iSYS4001::receiveTargetListResponse(iSYSTargetList_t *pTargetList, 
 /**
  * @brief Internal function to decode target list frame data into structured format
  *
- * Parses the raw UART frame data received from the radar device and extracts
+ * Parses the raw frame data received from the radar device and extracts
  * target information into the iSYSTargetList_t structure. Handles both 16-bit
  * and 32-bit data formats with appropriate scaling and conversion. Validates
  * frame structure and populates target data including signal strength, velocity,
@@ -501,6 +524,7 @@ iSYSResult_t iSYS4001::decodeTargetFrame(uint8_t *frame_array, uint16_t nrOfElem
  *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
  *
  * @note The function automatically converts meters to 0.1m fixed-point format (multiply by 10)
+ * @note Integer inputs are recommended; floating-point values should be avoided to ensure consistent processing.
  * @note Changes take effect immediately but should be saved with saveApplicationSettings()
  * @note Recommended timeout is >= 100ms (300ms used in examples)
  *
@@ -632,6 +656,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, u
  *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
  *
  * @note The function automatically converts meters to 0.1m fixed-point format (multiply by 10)
+ * @note Integer inputs are recommended; floating-point values should be avoided to ensure consistent processing.
  * @note Changes take effect immediately but should be saved with saveApplicationSettings()
  * @note Recommended timeout is >= 100ms (300ms used in examples)
  *
@@ -1975,7 +2000,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, 
 /**
  * @brief Set the target direction filter for a specified output channel
  *
- * Configures which target directions are considered for the specified output channel
+ * Configures which target directions(APPROACHING, RECEDING, BOTH) are considered for the specified output channel
  * on the iSYS-4001 radar device. This allows filtering targets based on their
  * movement direction relative to the radar sensor.
  *
@@ -2093,14 +2118,14 @@ iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, 
 }
 
 /**
- * @brief Get the current target direction filter for a specified output channel
+ * @brief Get the current target direction for a specified output channel
  *
- * Retrieves the current target direction filter setting for the specified output channel
+ * Retrieves the current target direction (APPROACHING, RECEDING, BOTH) setting for the specified output channel
  * from the iSYS-4001 radar device. This shows which target directions are currently
  * being considered for the selected output.
  *
  * @param outputnumber Output channel to query (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
- * @param direction Pointer to iSYSDirection_type_t variable that will receive the current direction filter
+ * @param direction Pointer to iSYSDirection_type_t variable that will receive the current direction
  * @param destAddress Device Radar Destination address (typically 0x80)
  * @param timeout Maximum time in milliseconds to wait for response
  *
@@ -2117,11 +2142,11 @@ iSYSResult_t iSYS4001::iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, 
  * @note Recommended timeout is >= 100ms (300ms used in examples)
  *
  * @example
- *   // Get current direction filter for output 1
+ *   // Get current direction for output 1
  *   iSYSDirection_type_t currentDirection;
  *   iSYSResult_t res = radar.iSYS_getOutputDirection(ISYS_OUTPUT_1, &currentDirection, 0x80, 300);
  *   if (res == ERR_OK) {
- *       Serial.print("Current direction filter: ");
+ *       Serial.print("Current direction : ");
  *       Serial.println(currentDirection);
  *   }
  */
@@ -2374,7 +2399,7 @@ iSYSResult_t iSYS4001::saveAllSettings(uint8_t destAddress, uint32_t timeout)
 /**
  * @brief Internal function to send EEPROM command frame to radar device
  *
- * Constructs and transmits a UART command frame for EEPROM operations to the
+ * Constructs and transmits a command frame for EEPROM operations to the
  * iSYS-4001 radar device. This is an internal helper function used by
  * sendEEPROMCommand() to send the actual command frame.
  *
@@ -2550,8 +2575,7 @@ uint8_t iSYS4001::calculateFCS(const uint8_t *data, uint8_t startIndex, uint8_t 
 /**
  * @brief Set the device address for the radar sensor
  *
- * Changes the UART address of the iSYS-4001 radar device. This allows multiple
- * radar devices to be connected to the same UART bus with unique addresses.
+ * Changes the DESTINATION address of the iSYS-4001 radar device.
  * After setting a new address, all subsequent communications must use the new address.
  *
  * @param deviceaddress New device address to set (typically 0x80-0xFF)
@@ -2662,7 +2686,7 @@ iSYSResult_t iSYS4001::iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t dest
 /**
  * @brief Get the current device address of the radar sensor
  *
- * Retrieves the current UART address of the iSYS-4001 radar device. This is useful
+ * Retrieves the current device/destination address of the iSYS-4001 radar device. This is useful
  * for discovering the address of a device when it's unknown, or for verification
  * after setting a new address.
  *
@@ -2831,8 +2855,7 @@ iSYSResult_t iSYS4001::iSYS_startAcquisition(uint8_t destAddress, uint32_t timeo
  * @brief Stop radar acquisition on the device
  *
  * Halts the measurement cycle on the iSYS-4001 radar device. This function
- * stops the device from actively scanning and detecting targets. Stopping
- * acquisition may be required before changing certain device settings.
+ * stops the device from actively scanning and detecting targets.
  *
  * @param destAddress Device Radar Destination address (typically 0x80)
  * @param timeout Maximum time in milliseconds to wait for acknowledgement
@@ -2845,9 +2868,8 @@ iSYSResult_t iSYS4001::iSYS_startAcquisition(uint8_t destAddress, uint32_t timeo
  *         - ERR_INVALID_CHECKSUM: Response checksum validation failed
  *         - ERR_COMMAND_MAX_DATA_OVERFLOW: Response exceeds internal buffer
  *
- * @note Stopping acquisition may be required before changing certain settings
  * @note Recommended timeout is >= 100ms (300ms used in examples)
- * @note Flush stale UART bytes before issuing commands for improved reliability
+ * @note Flush stale  bytes before issuing commands for improved reliability
  *
  * @example
  *   // Stop radar acquisition
@@ -2882,7 +2904,7 @@ iSYSResult_t iSYS4001::iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeou
 /**
  * @brief Internal function to send acquisition start/stop command to radar device
  *
- * Constructs and transmits a UART command frame to start or stop radar acquisition
+ * Constructs and transmits a command frame to start or stop radar acquisition
  * on the iSYS-4001 device. This is an internal helper function used by
  * iSYS_startAcquisition() and iSYS_stopAcquisition().
  *
@@ -3030,7 +3052,8 @@ iSYSResult_t iSYS4001::receiveAcquisitionAcknowledgement(uint8_t destAddress, ui
  * Configures the multiple target filtering for the specified output channel
  * on the iSYS-4001 radar device. This function specifically handles signal
  * selection for multiple target filtering and always sets the signal filter
- * to ISYS_OFF for multiple target operation.
+ * to ISYS_OFF for multiple target operation.This is used when users want to 
+ * scan multiple targets.
  *
  * @param outputnumber Output channel to configure (ISYS_OUTPUT_1, ISYS_OUTPUT_2, or ISYS_OUTPUT_3)
  * @param destAddress Device Radar Destination address (typically 0x80)
@@ -3086,7 +3109,7 @@ iSYSResult_t iSYS4001::iSYS_setMultipleTargetFilter(iSYSOutputNumber_t outputnum
 /**
  * @brief Internal function to send multiple target filter request to radar device
  *
- * Constructs and transmits a UART command frame to set multiple target filtering
+ * Constructs and transmits a command frame to set multiple target filtering
  * for the specified output channel on the iSYS-4001 radar device. This is an
  * internal helper function used by iSYS_setMultipleTargetFilter().
  *
@@ -3288,7 +3311,7 @@ iSYSResult_t iSYS4001::iSYS_setOutputFilterType(iSYSOutputNumber_t outputnumber,
 /**
  * @brief Internal function to send output filter type request to radar device
  *
- * Constructs and transmits a UART command frame to set the output filter type
+ * Constructs and transmits a command frame to set the output filter type
  * for single target filtering on the specified output channel of the iSYS-4001
  * radar device. This is an internal helper function used by iSYS_setOutputFilterType().
  *
@@ -3492,7 +3515,7 @@ iSYSResult_t iSYS4001::iSYS_getOutputFilterType(iSYSOutputNumber_t outputnumber,
 /**
  * @brief Internal function to send get output filter type request to radar device
  *
- * Constructs and transmits a UART command frame to request the current output filter type
+ * Constructs and transmits a command frame to request the current output filter type
  * setting for single target filtering on the specified output channel of the iSYS-4001
  * radar device. This is an internal helper function used by iSYS_getOutputFilterType().
  *

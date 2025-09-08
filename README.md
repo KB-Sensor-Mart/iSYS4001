@@ -1,385 +1,239 @@
-# iSYS4001 Arduino Library
+## iSYS4001 Library
 
+An easy-to-use library for the InnoSenT iSYS4001 radar sensor. It provides a high-level C++ API to start/stop acquisition, configure output filters and thresholds, read single/multiple targets, and persist settings to EEPROM.
 
-A comprehensive Arduino library for interfacing with the **InnoSenT iSYS4001 radar sensor**. This library provides an easy-to-use interface for all standard radar operations including target detection, configuration, and data processing.
-
-## 📋 Table of Contents
-
+### Table of Contents
 - [Features](#features)
+- [Supported platforms](#supported-platforms)
 - [Installation](#installation)
-- [Hardware Requirements](#hardware-requirements)
-- [Quick Start](#quick-start)
-- [API Reference](#api-reference)
+- [Wiring (example: ESP32)](#wiring-example-esp32)
+- [Quick start](#quick-start)
 - [Examples](#examples)
-- [Configuration](#configuration)
-- [Error Handling](#error-handling)
-- [Contributing](#contributing)
-- [License](#license)
+- [API overview](#api-overview)
+- [Return codes](#return-codes)
+- [Architecture and protocol (high-level)](#architecture-and-protocol-high-level)
+- [Data model](#data-model)
+- [Enumerations (selected)](#enumerations-selected)
+- [Configuration semantics](#configuration-semantics)
+- [EEPROM operations](#eeprom-operations)
+- [Timing & performance guidance](#timing--performance-guidance)
+- [Troubleshooting](#troubleshooting)
+- [Versioning & compatibility](#versioning--compatibility)
 - [Authors](#authors)
 
-## ✨ Features
+### Features
+- **Target acquisition**: Read 16-bit and 32-bit target lists with range, velocity, angle, and signal
+- **Configuration**: Set/get min/max for range, velocity, signal; set direction filters; set output filter type
+- **EEPROM support**: Save factory, sensor, application, or all settings
+- **Device address**: Get/set device address
+- **Debugging**: Optional debug output to any `Stream`
 
-- **Complete API Coverage**: Full support for most of the iSYS4001 radar sensor functions
-- **Dual Precision Support**: Both 16-bit and 32-bit target data formats
-- **Comprehensive Configuration**: Range, velocity, signal, and direction settings
-- **Multiple Output Support**: Configure up to 3 independent outputs
-- **EEPROM Management**: Save/restore settings and factory reset
-- **Debug Support**: Built-in debugging with hex frame output
-- **Error Handling**: Comprehensive error codes and validation
-- **Arduino Compatible**: Works with Arduino IDE and ESP32
+### Supported platforms
+- Arduino-compatible boards with a hardware UART (e.g., ESP32 uses `Serial2` in the example)
 
-## 📦 Installation
-
-### Method 1: Manual Installation
-1. Download the latest release from GitHub
-2. Extract the ZIP file
-3. Copy the `iSYS4001` folder to your Arduino `libraries` directory
-4. Restart Arduino IDE
-
-### Method 3: Git Clone
-```bash
-cd ~/Documents/Arduino/libraries
-git clone https://github.com/yourusername/iSYS4001.git
-```
-
-## 🔌 Hardware Requirements
-
-### Supported Platforms
-- **ESP32** (recommended)
-
-### Wiring (ESP32 Example)
-```
-ESP32          iSYS4001 Radar
-------         --------------
-GPIO16 (RX) ←→ TX
-GPIO17 (TX) ←→ RX
-GND          ←→ GND
-3.3V/5V      ←→ VCC
-```
-
-### Power Requirements
-- **Voltage**: 3.3V - 5V
-- **Current**: ~100mA typical
-- **Communication**: UART (115200 baud, 8N1)
-
-## 🚀 Quick Start
+### Installation
+1. Download or clone this repository into your Arduino `libraries` folder as `iSYS4001`.
+2. Or, use Sketch → Include Library → Add .ZIP Library… and select the ZIP of this repo.
+3. Include the header in your sketch:
 
 ```cpp
-#include "iSYS4001.h"
+#include <iSYS4001.h>
+```
 
-// Create radar object
+### Wiring (example: ESP32)
+- Connect iSYS4001 UART to your board’s hardware serial pins (example uses `Serial2` on GPIO16/17)
+- Power the sensor according to its datasheet
+
+### Quick start
+The snippet below demonstrates initialization, starting acquisition, basic configuration, and reading target lists.
+
+```cpp
+#include <iSYS4001.h>
+
+// Create radar object on a hardware serial port
 iSYS4001 radar(Serial2, 115200);
 
-// Configuration
 const uint8_t RADAR_ADDRESS = 0x80;
-const uint32_t TIMEOUT_MS = 300;  //should be minimum 100ms
+const uint32_t TIMEOUT_MS = 300;
 
 void setup() {
-    Serial.begin(115200);
-    Serial2.begin(115200, SERIAL_8N1, 16, 17);
-    
-    // Start acquisition
-    radar.iSYS_startAcquisition(RADAR_ADDRESS, TIMEOUT_MS);
+  Serial.begin(115200);
+  Serial2.begin(115200, SERIAL_8N1, 16, 17); // ESP32 example pins
+  radar.setDebug(Serial, true);
+
+  // Start acquisition
+  if (radar.iSYS_startAcquisition(RADAR_ADDRESS, TIMEOUT_MS) != ERR_OK) {
+    Serial.println("Failed to start acquisition");
+    while (true) {}
+  }
+
+  // Configure limits (output 1)
+  radar.iSYS_setOutputRangeMin(ISYS_OUTPUT_1, 1,   RADAR_ADDRESS, TIMEOUT_MS);
+  radar.iSYS_setOutputRangeMax(ISYS_OUTPUT_1, 150, RADAR_ADDRESS, TIMEOUT_MS);
+  radar.iSYS_setOutputVelocityMin(ISYS_OUTPUT_1, 1,   RADAR_ADDRESS, TIMEOUT_MS);
+  radar.iSYS_setOutputVelocityMax(ISYS_OUTPUT_1, 120, RADAR_ADDRESS, TIMEOUT_MS);
+  radar.iSYS_setOutputSignalMin(ISYS_OUTPUT_1, 3,   RADAR_ADDRESS, TIMEOUT_MS);
+  radar.iSYS_setOutputSignalMax(ISYS_OUTPUT_1, 140, RADAR_ADDRESS, TIMEOUT_MS);
+  radar.iSYS_setOutputDirection(ISYS_OUTPUT_1, ISYS_TARGET_DIRECTION_BOTH, RADAR_ADDRESS, TIMEOUT_MS);
+  radar.iSYS_setOutputFilterType(ISYS_OUTPUT_1, ISYS_OUTPUT_FILTER_MEDIAN, RADAR_ADDRESS, TIMEOUT_MS);
+  radar.iSYS_setOutputSignalFilter(ISYS_OUTPUT_1, ISYS_VELOCITY_RADIAL, RADAR_ADDRESS, TIMEOUT_MS);
 }
 
 void loop() {
-    // Get target list
+  static unsigned long lastRead = 0;
+  if (millis() - lastRead >= 1000) {
+    lastRead = millis();
+
     iSYSTargetList_t targets;
-    iSYSResult_t result = radar.getTargetList32(&targets, RADAR_ADDRESS, TIMEOUT_MS);
-    
-    if (result == ERR_OK && targets.error.iSYSTargetListError == TARGET_LIST_OK) {
-        Serial.println("Targets found: " + String(targets.nrOfTargets));
-        
-        for (uint16_t i = 0; i < targets.nrOfTargets; i++) {
-            Serial.println("Target " + String(i + 1) + ":");
-            Serial.println("  Range: " + String(targets.targets[i].range) + " m");
-            Serial.println("  Velocity: " + String(targets.targets[i].velocity) + " m/s");
-            Serial.println("  Signal: " + String(targets.targets[i].signal) + " dB");
-            Serial.println("  Angle: " + String(targets.targets[i].angle) + " deg");
-        }
+    if (radar.getTargetList16(&targets, RADAR_ADDRESS, TIMEOUT_MS, ISYS_OUTPUT_1) == ERR_OK &&
+        targets.error.iSYSTargetListError == TARGET_LIST_OK) {
+      for (uint16_t i = 0; i < targets.nrOfTargets && i < MAX_TARGETS; i++) {
+        Serial.print("Target "); Serial.print(i + 1);
+        Serial.print(": R="); Serial.print(targets.targets[i].range);
+        Serial.print(" m, V="); Serial.print(targets.targets[i].velocity);
+        Serial.print(" m/s, S="); Serial.print(targets.targets[i].signal);
+        Serial.println(" dB");
+      }
     }
-    
-    delay(1000);
+  }
 }
 ```
 
-## 📚 API Reference
+### Examples
+- `iSYS4001.ino`: End-to-end demo (setup, configure, read 16/32-bit targets)
+- `Examples/getTargetList.txt`: Notes on reading target lists
+- `Examples/multipleTarget16_32.txt`: Multiple target decoding
+- `Examples/outputSignalFilter.txt`: Output signal filter usage
+- `Examples/setRangeMinMax.txt`: Range min/max
+- `Examples/setVelocityMinMax.txt`: Velocity min/max
 
-### Core Functions
+### API overview
+Create an instance:
 
-#### Target Detection
 ```cpp
-// Get target list (16-bit precision)
-iSYSResult_t getTargetList16(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
-
-// Get target list (32-bit precision)
-iSYSResult_t getTargetList32(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
+iSYS4001(HardwareSerial &serial, uint32_t baud = 115200);
 ```
 
-#### Range Configuration
+Debug:
 ```cpp
-// Set range limits (in meters)
-iSYSResult_t iSYS_setOutputRangeMin(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);
-iSYSResult_t iSYS_setOutputRangeMax(iSYSOutputNumber_t outputnumber, uint16_t range, uint8_t destAddress, uint32_t timeout);
-
-// Get range limits
-iSYSResult_t iSYS_getOutputRangeMin(iSYSOutputNumber_t outputnumber, float *range, uint8_t destAddress, uint32_t timeout);
-iSYSResult_t iSYS_getOutputRangeMax(iSYSOutputNumber_t outputnumber, float *range, uint8_t destAddress, uint32_t timeout);
+iSYSResult_t setDebug(Stream &stream, bool enabled);
 ```
 
-#### Velocity Configuration
+Acquisition:
 ```cpp
-// Set velocity limits (in km/h)
-iSYSResult_t iSYS_setOutputVelocityMin(iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout);
-iSYSResult_t iSYS_setOutputVelocityMax(iSYSOutputNumber_t outputnumber, uint16_t velocity, uint8_t destAddress, uint32_t timeout);
-
-// Get velocity limits
-iSYSResult_t iSYS_getOutputVelocityMin(iSYSOutputNumber_t outputnumber, float *velocity, uint8_t destAddress, uint32_t timeout);
-iSYSResult_t iSYS_getOutputVelocityMax(iSYSOutputNumber_t outputnumber, float *velocity, uint8_t destAddress, uint32_t timeout);
-```
-
-#### Signal Configuration
-```cpp
-// Set signal limits (in dB)
-iSYSResult_t iSYS_setOutputSignalMin(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout);
-iSYSResult_t iSYS_setOutputSignalMax(iSYSOutputNumber_t outputnumber, uint16_t signal, uint8_t destAddress, uint32_t timeout);
-
-// Get signal limits
-iSYSResult_t iSYS_getOutputSignalMin(iSYSOutputNumber_t outputnumber, float *signal, uint8_t destAddress, uint32_t timeout);
-iSYSResult_t iSYS_getOutputSignalMax(iSYSOutputNumber_t outputnumber, float *signal, uint8_t destAddress, uint32_t timeout);
-```
-
-#### Direction Control
-```cpp
-// Set target direction
-iSYSResult_t iSYS_setOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t direction, uint8_t destAddress, uint32_t timeout);
-
-// Get target direction
-iSYSResult_t iSYS_getOutputDirection(iSYSOutputNumber_t outputnumber, iSYSDirection_type_t *direction, uint8_t destAddress, uint32_t timeout);
-```
-
-#### Acquisition Control
-```cpp
-// Start/stop radar acquisition
 iSYSResult_t iSYS_startAcquisition(uint8_t destAddress, uint32_t timeout);
 iSYSResult_t iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeout);
 ```
 
-#### EEPROM Management
+Target list:
 ```cpp
-// Save settings
-iSYSResult_t saveApplicationSettings(uint8_t destAddress, uint32_t timeout);
-iSYSResult_t saveSensorSettings(uint8_t destAddress, uint32_t timeout);
-iSYSResult_t saveAllSettings(uint8_t destAddress, uint32_t timeout);
-
-// Factory reset
-iSYSResult_t setFactorySettings(uint8_t destAddress, uint32_t timeout);
+iSYSResult_t getTargetList16(iSYSTargetList_t* list, uint8_t dest, uint32_t timeout, iSYSOutputNumber_t out=ISYS_OUTPUT_1);
+iSYSResult_t getTargetList32(iSYSTargetList_t* list, uint8_t dest, uint32_t timeout, iSYSOutputNumber_t out=ISYS_OUTPUT_1);
 ```
 
-#### Device Management
+Configuration (range/velocity/signal min/max):
 ```cpp
-// Set/get device address
-iSYSResult_t iSYS_setDeviceAddress(uint8_t deviceaddress, uint8_t destAddress, uint32_t timeout);
-iSYSResult_t iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t destAddress, uint32_t timeout);
+iSYS_setOutputRangeMin/Max(...)
+iSYS_getOutputRangeMin/Max(...)
+iSYS_setOutputVelocityMin/Max(...)
+iSYS_getOutputVelocityMin/Max(...)
+iSYS_setOutputSignalMin/Max(...)
+iSYS_getOutputSignalMin/Max(...)
 ```
 
-#### Debug Support
+Direction and filters:
 ```cpp
-// Enable/disable debug output
-iSYSResult_t setDebug(Stream &stream, bool enabled);
+iSYS_setOutputDirection(...)
+iSYS_getOutputDirection(...)
+iSYS_setOutputFilterType(...)
+iSYS_getOutputFilterType(...)
+iSYS_setOutputSignalFilter(...)
+iSYS_getOutputSignalFilter(...)
 ```
 
-### Data Structures
-
-#### Target Information
+Device address and EEPROM:
 ```cpp
+iSYS_setDeviceAddress(...)
+iSYS_getDeviceAddress(...)
+setFactorySettings(...)
+saveSensorSettings(...)
+saveApplicationSettings(...)
+saveAllSettings(...)
+```
+
+### Return codes
+All API calls return an `iSYSResult_t`:
+- `ERR_OK` on success
+- Communication/frame errors: `ERR_COMMAND_NO_DATA_RECEIVED`, `ERR_INVALID_CHECKSUM`, etc.
+- Parameter/timeouts: `ERR_PARAMETER_OUT_OF_RANGE`, `ERR_TIMEOUT`, etc.
+
+### Architecture and protocol (high-level)
+- Physical layer: UART, default `115200 8N1`
+- Addressing: 1-byte destination address (default `0x80`)
+- Framing: Commands/acknowledgements and data frames with an 8-bit Frame Check Sequence (FCS)
+- Reliability: All setters expect an acknowledgement within the configured timeout
+
+### Data model
+Structs exposed by the API and their units:
+
+```cpp
+// Signal in dB, velocity in m/s, range in meters, angle in degrees
 typedef struct iSYSTarget {
-    float signal;   // Signal strength in dB
-    float velocity; // Velocity in m/s
-    float range;    // Range in meters
-    float angle;    // Angle in degrees
+  float signal;
+  float velocity;
+  float range;
+  float angle;
 } iSYSTarget_t;
-```
 
-#### Target List
-```cpp
+// Holds up to MAX_TARGETS (0x23 = 35) targets
 typedef struct iSYSTargetList {
-    union iSYSTargetListError_u error;
-    uint8_t outputNumber;
-    uint16_t nrOfTargets;
-    uint32_t clippingFlag;
-    iSYSTarget_t targets[MAX_TARGETS]; // Up to 35 targets
+  union iSYSTargetListError_u error; // TARGET_LIST_OK, ...
+  uint8_t outputNumber;              // iSYS_OUTPUT_1..3
+  uint16_t nrOfTargets;              // number of valid entries in targets[]
+  uint32_t clippingFlag;             // sensor-reported clipping flags
+  iSYSTarget_t targets[MAX_TARGETS]; // target array
 } iSYSTargetList_t;
 ```
 
-### Enumerations
+Key constants and limits:
+- `MAX_TARGETS = 0x23` (35 targets max per response)
+- Output channels: `ISYS_OUTPUT_1`, `ISYS_OUTPUT_2`, `ISYS_OUTPUT_3`
 
-#### Output Numbers
-```cpp
-typedef enum iSYSOutputNumber {
-    ISYS_OUTPUT_1 = 1,
-    ISYS_OUTPUT_2,
-    ISYS_OUTPUT_3
-} iSYSOutputNumber_t;
-```
+### Enumerations (selected)
+- Output filter type (`iSYSOutput_filter_t`): `HIGHEST_SIGNAL`, `MEAN`, `MEDIAN`, `MIN`, `MAX`
+- Signal filter selection (`iSYSFilter_signal_t`): `OFF`, `VELOCITY_RADIAL`, `RANGE_RADIAL`
+- Direction (`iSYSDirection_type_t`): `APPROACHING`, `RECEDING`, `BOTH`
+- Target list acquisition state (`iSYSTargetListError_t`): `TARGET_LIST_OK`, `TARGET_LIST_FULL`, `TARGET_LIST_REFRESHED`, `TARGET_LIST_ALREADY_REQUESTED`, `TARGET_LIST_ACQUISITION_NOT_STARTED`
 
-#### Direction Types
-```cpp
-typedef enum iSYSDirection_type {
-    ISYS_TARGET_DIRECTION_APPROACHING = 1,
-    ISYS_TARGET_DIRECTION_RECEDING = 2,
-    ISYS_TARGET_DIRECTION_BOTH = 3
-} iSYSDirection_type_t;
-```
+### Configuration semantics
+- Range/velocity/signal min/max apply per output channel. Use getters to read back actual values applied by the sensor (they may be quantized internally).
+- Direction filtering limits which target motions are reported on the specified output.
+- `iSYS_setOutputFilterType` selects how a single output value is derived when aggregating (e.g., median filtering).
+- `iSYS_setOutputSignalFilter` selects which signal component the filter operates on.
 
-#### Filter Types
-```cpp
-typedef enum iSYSOutput_filter {
-    ISYS_OUTPUT_FILTER_HIGHEST_SIGNAL = 0,
-    ISYS_OUTPUT_FILTER_MEAN,
-    ISYS_OUTPUT_FILTER_MEDIAN,
-    ISYS_OUTPUT_FILTER_MIN,
-    ISYS_OUTPUT_FILTER_MAX
-} iSYSOutput_filter_t;
-```
+### EEPROM operations
+- `setFactorySettings` restores factory defaults (not persisted unless saved afterward)
+- `saveSensorSettings` persists sensor-level configuration
+- `saveApplicationSettings` persists application-level configuration
+- `saveAllSettings` persists both sensor and application settings
 
-## 💡 Examples
+### Timing & performance guidance
+- Sensor cycle time ≈ 75 ms. Use `timeout >= 100 ms`; `300 ms` is conservative.
+- Poll target lists at ≤10 Hz to avoid starving the sensor’s processing pipeline.
+- Use a dedicated hardware UART. Shared serial prints at high rates can introduce jitter; enable debug only during setup or troubleshooting.
 
-The library includes several example sketches in the `Examples` folder:
+### Troubleshooting
+- `ERR_TIMEOUT`: Check wiring, ground reference, baud rate, and ensure acquisition is started.
+- `ERR_COMMAND_NO_VALID_FRAME_FOUND` / `ERR_INVALID_CHECKSUM`: Reduce noise, verify UART settings (`115200 8N1`), shorten cables, avoid software serial.
+- `TARGET_LIST_ACQUISITION_NOT_STARTED`: Call `iSYS_startAcquisition` and wait one cycle before reading targets.
+- Empty lists with `TARGET_LIST_OK`: Increase thresholds (range/velocity/signal) or reposition the sensor for better SNR.
 
-### Basic Target Detection
-```cpp
-// See Examples/getTargetList.txt
-// Minimal example for reading target data
-```
+### Versioning & compatibility
+- Library version: see `library.properties` (currently `1.0.0`).
+- The public API (headers) is considered stable; breaking changes will bump the minor/major version.
 
-### Range Configuration
-```cpp
-// See Examples/setRangeMinMax.txt
-// Example for setting range limits
-```
+### Authors
+- Author: Ankit Sharma, Uday Singh Gangola
+- Maintainer: Kuchhal Brothers
 
-### Velocity Configuration
-```cpp
-// See Examples/setVelocityMinMax.txt
-// Example for setting velocity limits
-```
 
-### Signal Filtering
-```cpp
-// See Examples/outputSignalFilter.txt
-// Example for signal filtering configuration
-```
-
-### Multiple Target Handling
-```cpp
-// See Examples/multipleTarget16_32.txt
-// Example comparing 16-bit vs 32-bit precision
-```
-
-## ⚙️ Configuration
-
-### Timing Considerations
-- **iSYS-4001 cycle time**: ~75ms
-- **Recommended timeout**: ≥100ms (300ms used in examples)
-
-### Parameter Ranges
-- **Range**: 0-150 meters
-- **Velocity**: 0-250 km/h
-- **Signal**: 0-250 dB
-- **Max Targets**: 35 per output
-
-### Default Settings
-- **Baud Rate**: 115200
-- **Device Address**: 0x80
-- **Output**: ISYS_OUTPUT_1
-- **Direction**: ISYS_TARGET_DIRECTION_BOTH
-
-## 🚨 Error Handling
-
-The library provides comprehensive error codes:
-
-```cpp
-typedef enum {
-    ERR_OK = 0,                           // Success
-    ERR_NULL_POINTER = 1,                 // Null pointer passed
-    ERR_PARAMETER_OUT_OF_RANGE = 2,       // Parameter out of valid range
-    ERR_OUTPUT_OUT_OF_RANGE = 3,          // Invalid output number
-    ERR_TIMEOUT = 4,                      // Operation timeout
-    ERR_COMMAND_NO_DATA_RECEIVED = 5,     // No response from radar
-    ERR_COMMAND_NO_VALID_FRAME_FOUND = 6, // Invalid frame format
-    ERR_COMMAND_RX_FRAME_DAMAGED = 7,     // Corrupted frame received
-    ERR_COMMAND_RX_FRAME_LENGTH = 8,      // Incorrect frame length
-    ERR_INVALID_CHECKSUM = 9,             // Checksum mismatch
-    ERR_COMMAND_MAX_DATA_OVERFLOW = 10,   // Buffer overflow
-    ERR_FRAME_INCOMPLETE = 11,            // Incomplete frame
-    ERR_COMMAND_FAILURE = 12              // General command failure
-} iSYSResult_t;
-```
-
-### Error Handling Best Practices
-```cpp
-iSYSResult_t result = radar.getTargetList32(&targets, RADAR_ADDRESS, TIMEOUT_MS);
-
-if (result != ERR_OK) {
-    Serial.println("Error: " + String(result));
-    // Handle error appropriately
-    return;
-}
-
-if (targets.error.iSYSTargetListError != TARGET_LIST_OK) {
-    Serial.println("Target list error: " + String(targets.error.iSYSTargetListError));
-    // Handle target list error
-    return;
-}
-
-// Process targets...
-```
-
-## 🔧 Debug Support
-
-Enable debug output to troubleshoot communication issues:
-
-```cpp
-// Enable debug output to Serial
-radar.setDebug(Serial, true);
-
-// Disable debug output
-radar.setDebug(Serial, false);
-```
-
-Debug output includes:
-- Hex frame dumps of all communication
-- Command/response timing
-- Error details
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these steps:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### Development Guidelines
-- Follow Arduino coding standards
-- Add comprehensive comments
-- Include example code for new features
-- Update documentation
-- Test on multiple platforms
-
-## 👥 Authors
-
-- **Ankit Sharma** - *Initial development*
-- **Uday Singh Gangola** - *Initial development*
-- **Kuchhal Brothers** - *Maintainer*
-
-## 🙏 Acknowledgments
-
-- InnoSenT GmbH for the iSYS4001 radar sensor
-
----
-
-**Made with ❤️ for the Arduino and radar sensing community**
