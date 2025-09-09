@@ -115,6 +115,12 @@ typedef struct iSYSTargetList
     iSYSTarget_t targets[MAX_TARGETS];
 } iSYSTargetList_t;
 
+typedef enum iSYSRangeBound
+{
+    ISYS_RANGE_0_TO_50 = 0, // use this when want to set range between 0.0m to 50.0m
+    ISYS_RANGE_0_TO_150 = 1 // use this when want to set range between 0.0m to 150.0m
+} iSYSRangeBound_t;
+
 class iSYS4001
 {
 
@@ -132,6 +138,36 @@ public:
     iSYSResult_t getTargetList16(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
     iSYSResult_t getTargetList32(iSYSTargetList_t *pTargetList, uint8_t destAddress, uint32_t timeout, iSYSOutputNumber_t outputnumber = ISYS_OUTPUT_1);
 
+
+    /***************************************************************
+     *  ACQUISITION CONTROL FUNCTIONS
+     ***************************************************************/
+
+    iSYSResult_t iSYS_startAcquisition(uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeout);
+
+    /***************************************************************
+     *  SET/GET RANGE BOUND FUNCTIONS
+     ***************************************************************
+     * NOTE:
+     * These functions configure and read the range limit of the radar sensor.
+     * The range limit defines the maximum measurable distance of the sensor.
+     *
+     * Options:
+     *   - ISYS_RANGE_0_TO_50   → 0 to 50 meters
+     *   - ISYS_RANGE_0_TO_150  → 0 to 150 meters
+     *
+     * Usage:
+     *   - iSYS_setRangeBound() : Requires iSYS_stopAcquisition() to be called first,
+     *                            since the range setting can only be changed while
+     *                            acquisition is stopped.
+     *   - iSYS_getRangeBound() : Can be called at any time. No stop required.
+     ***************************************************************/
+
+    iSYSResult_t iSYS_setRangeBound(iSYSRangeBound_t bound, uint8_t destAddress, uint32_t timeout);
+    iSYSResult_t iSYS_getRangeBound(iSYSRangeBound_t *bound, uint8_t destAddress, uint32_t timeout);
+
+    
     /***************************************************************
      *  SET/GET RANGE MIN/MAX FUNCTIONS
      ***************************************************************/
@@ -183,13 +219,6 @@ public:
     iSYSResult_t iSYS_getDeviceAddress(uint8_t *deviceaddress, uint8_t destAddress, uint32_t timeout);
 
     /***************************************************************
-     *  ACQUISITION CONTROL FUNCTIONS
-     ***************************************************************/
-
-    iSYSResult_t iSYS_startAcquisition(uint8_t destAddress, uint32_t timeout);
-    iSYSResult_t iSYS_stopAcquisition(uint8_t destAddress, uint32_t timeout);
-
-    /***************************************************************
      *  OUTPUT SINGLE TARGET FILTER FUNCTIONS
      ***************************************************************/
 
@@ -213,7 +242,7 @@ private:
     /***************************************************************
      *  HELPER FUNCTIONS FOR COMMUNICATION AND DECODING
      ***************************************************************/
-    
+
     // Internal debug helpers (simplified, no return values)
     void debugPrint(const char *msg, bool newline = false);
     void debugPrintHexFrame(const char *prefix, const uint8_t *data, size_t length);
@@ -257,7 +286,6 @@ private:
 
     iSYSResult_t sendSetMultipleTargetFilterRequest(iSYSOutputNumber_t outputnumber, uint8_t destAddress);
     iSYSResult_t receiveSetMultipleTargetFilterAcknowledgement(uint8_t destAddress, uint32_t timeout);
-
 };
 
 #endif

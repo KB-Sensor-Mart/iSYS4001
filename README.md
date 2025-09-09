@@ -40,15 +40,22 @@ An easy-to-use library for the InnoSenT iSYS4001 radar sensor. It provides a hig
 #include <iSYS4001.h>
 ```
 
-### Wiring (example: ESP32)
-- Connect iSYS4001 UART to your board’s hardware serial pins (example uses `Serial2` on GPIO16/17)
-- Power the sensor according to its datasheet
+### Wiring (Example: ESP32)
+- Connect the iSYS4001 UART interface to your board’s hardware serial pins  
+  (this example uses `Serial2` on **GPIO16** for RX and **GPIO17** for TX).  
+- Power the sensor according to its datasheet specifications.  
 
-### Quick start
-The snippet below demonstrates initialization, starting acquisition, basic configuration, and reading target lists.
+![ESP32 Wiring Schematic](images/ESP_Schemetic.png)
+
+---
+
+### Quick Start
+The snippet below demonstrates initialization, starting acquisition, basic configuration,  
+and reading target lists:
 
 ```cpp
 #include <iSYS4001.h>
+
 
 // Create radar object on a hardware serial port
 iSYS4001 radar(Serial2, 115200);
@@ -313,6 +320,73 @@ iSYSResult_t getTargetList32(iSYSTargetList_t* list, uint8_t dest, uint32_t time
 
 Configuration (range/velocity/signal min/max):
 ```cpp
+
+/**
+ * @brief Set the sensor range bound (0–50 m or 0–150 m)
+ *
+ * Configures the overall range window of the iSYS-4001 device. This setting
+ * switches the operating range between 0–50 m and 0–150 m. The device should
+ * not be acquiring when changing this bound; stop acquisition first if needed.
+ *
+ * @param bound Desired range bound
+ *        - ISYS_RANGE_0_TO_50  → 0 to 50 meters
+ *        - ISYS_RANGE_0_TO_150 → 0 to 150 meters
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_TIMEOUT: Timeout parameter is zero
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No acknowledgement received
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Acknowledgement frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Acknowledgement checksum invalid
+ *
+ * @note Call iSYS_stopAcquisition() before changing range bound; restart afterwards.
+ * @note Persist with saveApplicationSettings() if you want the setting to survive power cycles.
+ *
+ * @example
+ *   // Set device to extended 150 m range
+ *   // Ensure acquisition is stopped before calling this
+ *   iSYSResult_t res = radar.iSYS_setRangeBound(ISYS_RANGE_0_TO_150, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Range bound set to 0–150 m");
+ *   }
+ */
+    iSYSResult_t iSYS_setRangeBound(iSYSRangeBound_t bound, uint8_t destAddress, uint32_t timeout);
+
+
+
+/**
+ * @brief Get the current sensor range bound (0–50 m or 0–150 m)
+ *
+ * Queries the iSYS-4001 device to determine which range window is active.
+ * This does not require acquisition to be stopped.
+ *
+ * @param bound Output parameter that will receive the current range bound
+ *        - ISYS_RANGE_0_TO_50  → 0 to 50 meters
+ *        - ISYS_RANGE_0_TO_150 → 0 to 150 meters
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for the response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_NULL_POINTER: bound pointer is null
+ *         - ERR_TIMEOUT: Timeout parameter is zero
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response received
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum invalid
+ *
+ * @example
+ *   iSYSRangeBound_t current;
+ *   iSYSResult_t res = radar.iSYS_getRangeBound(&current, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       // use 'current'
+ *   }
+ */
+    iSYSResult_t iSYS_getRangeBound(iSYSRangeBound_t *bound, uint8_t destAddress, uint32_t timeout);
+
+
+
 /**
  * @brief Set the minimum detection range for a specified output channel
  *
@@ -347,7 +421,6 @@ Configuration (range/velocity/signal min/max):
  *   }
  */
 iSYS_setOutputRangeMin(...)
-
 
 
 

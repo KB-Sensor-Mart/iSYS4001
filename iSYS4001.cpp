@@ -4082,3 +4082,267 @@ iSYSResult_t iSYS4001::receiveGetOutputSignalFilterResponse(iSYSFilter_signal_t 
     *signal = (iSYSFilter_signal_t)response[8];
     return ERR_OK;
 }
+
+
+/***************************************************************
+ *  SET/GET RANGE BOUND FUNCTIONS
+ **************************************************************/
+
+/**
+ * @brief Set the sensor range bound (0–50 m or 0–150 m)
+ *
+ * Configures the overall range window of the iSYS-4001 device. This setting
+ * switches the operating range between 0–50 m and 0–150 m. The device should
+ * not be acquiring when changing this bound; stop acquisition first if needed.
+ *
+ * @param bound Desired range bound
+ *        - ISYS_RANGE_0_TO_50  → 0 to 50 meters
+ *        - ISYS_RANGE_0_TO_150 → 0 to 150 meters
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for acknowledgement
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_TIMEOUT: Timeout parameter is zero
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No acknowledgement received
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Acknowledgement frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Acknowledgement checksum invalid
+ *
+ * @note Call iSYS_stopAcquisition() before changing range bound; restart afterwards.
+ * @note Persist with saveApplicationSettings() if you want the setting to survive power cycles.
+ *
+ * @example
+ *   // Set device to extended 150 m range
+ *   // Ensure acquisition is stopped before calling this
+ *   iSYSResult_t res = radar.iSYS_setRangeBound(ISYS_RANGE_0_TO_150, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       Serial.println("Range bound set to 0–150 m");
+ *   }
+ */
+iSYSResult_t iSYS4001::iSYS_setRangeBound(iSYSRangeBound_t bound, uint8_t destAddress, uint32_t timeout)
+{
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
+    uint8_t command[13];
+    uint8_t index = 0;
+
+    command[index++] = 0x68;
+    command[index++] = 0x07;
+    command[index++] = 0x07;
+    command[index++] = 0x68;
+    command[index++] = destAddress;
+    command[index++] = 0x01;
+    command[index++] = 0xD3;
+    command[index++] = 0x00;
+    command[index++] = 0x10;
+    command[index++] = 0x00;
+    command[index++] = (bound == ISYS_RANGE_0_TO_150) ? 0x01 : 0x00;
+
+    uint8_t fcs = calculateFCS(command, 4, 10);
+    command[index++] = fcs;
+    command[index++] = 0x16;
+
+    debugPrintHexFrame("Sending SET range bound command: ", command, sizeof(command));
+
+    size_t bytesWritten = _serial.write(command, sizeof(command));
+    _serial.flush();
+
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    uint8_t response[9];
+    size_t responseIndex = 0;
+    uint32_t startTime = millis();
+
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
+    {
+        if (_serial.available())
+        {
+            response[responseIndex++] = _serial.read();
+            if (response[responseIndex - 1] == 0x16)
+                break;
+        }
+    }
+
+    debugPrintHexFrame("Received SET range bound acknowledgement: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 9)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x03 || response[2] != 0x03 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD3 || response[8] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 9)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 6);
+        if (response[7] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    return ERR_OK;
+}
+
+/**
+ * @brief Get the current sensor range bound (0–50 m or 0–150 m)
+ *
+ * Queries the iSYS-4001 device to determine which range window is active.
+ * This does not require acquisition to be stopped.
+ *
+ * @param bound Output parameter that will receive the current range bound
+ *        - ISYS_RANGE_0_TO_50  → 0 to 50 meters
+ *        - ISYS_RANGE_0_TO_150 → 0 to 150 meters
+ * @param destAddress Device Radar Destination address (typically 0x80)
+ * @param timeout Maximum time in milliseconds to wait for the response
+ *
+ * @return iSYSResult_t ERR_OK on success, or error code for failure conditions:
+ *         - ERR_NULL_POINTER: bound pointer is null
+ *         - ERR_TIMEOUT: Timeout parameter is zero
+ *         - ERR_COMMAND_NO_DATA_RECEIVED: No response received
+ *         - ERR_COMMAND_RX_FRAME_LENGTH: Response frame too short
+ *         - ERR_COMMAND_RX_FRAME_DAMAGED: Frame structure invalid
+ *         - ERR_INVALID_CHECKSUM: Response checksum invalid
+ *
+ * @example
+ *   iSYSRangeBound_t current;
+ *   iSYSResult_t res = radar.iSYS_getRangeBound(&current, 0x80, 300);
+ *   if (res == ERR_OK) {
+ *       // use 'current'
+ *   }
+ */
+iSYSResult_t iSYS4001::iSYS_getRangeBound(iSYSRangeBound_t *bound, uint8_t destAddress, uint32_t timeout)
+{
+    if (bound == NULL)
+        return ERR_NULL_POINTER;
+
+    if (timeout == 0)
+    {
+        return ERR_TIMEOUT;
+    }
+
+    uint8_t command[11];
+    uint8_t index = 0;
+
+    command[index++] = 0x68;
+    command[index++] = 0x05;
+    command[index++] = 0x05;
+    command[index++] = 0x68;
+    command[index++] = destAddress;
+    command[index++] = 0x01;
+    command[index++] = 0xD2;
+    command[index++] = 0x00;
+    command[index++] = 0x10;
+    uint8_t fcs = calculateFCS(command, 4, 8);
+    command[index++] = fcs;
+    command[index++] = 0x16;
+
+    debugPrintHexFrame("Sending GET range bound command: ", command, sizeof(command));
+
+    size_t bytesWritten = _serial.write(command, sizeof(command));
+    _serial.flush();
+    if (bytesWritten != sizeof(command))
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    uint8_t response[11];
+    size_t responseIndex = 0;
+    uint32_t startTime = millis();
+
+    while ((millis() - startTime) < timeout && responseIndex < sizeof(response))
+    {
+        if (_serial.available())
+        {
+            response[responseIndex++] = _serial.read();
+            if (response[responseIndex - 1] == 0x16)
+                break;
+        }
+    }
+
+    debugPrintHexFrame("Received GET range bound response: ", response, responseIndex);
+
+    if (responseIndex == 0)
+    {
+        return ERR_COMMAND_NO_DATA_RECEIVED;
+    }
+
+    if (responseIndex < 11)
+    {
+        return ERR_COMMAND_RX_FRAME_LENGTH;
+    }
+
+    if (response[0] != 0x68 || response[1] != 0x05 || response[2] != 0x05 ||
+        response[3] != 0x68 || response[4] != 0x01 || response[5] != destAddress ||
+        response[6] != 0xD2 || response[10] != 0x16)
+    {
+        return ERR_COMMAND_RX_FRAME_DAMAGED;
+    }
+
+    if (responseIndex >= 11)
+    {
+        uint8_t expectedFCS = calculateFCS(response, 4, 8);
+        if (response[9] != expectedFCS)
+        {
+            return ERR_INVALID_CHECKSUM;
+        }
+    }
+
+    // Payload carries value 0x00 (near/50m) or 0x01 (far/150m)
+    *bound = (response[8] == 0x01) ? ISYS_RANGE_0_TO_150 : ISYS_RANGE_0_TO_50;
+    return ERR_OK;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
