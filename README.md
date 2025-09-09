@@ -45,7 +45,7 @@ An easy-to-use library for the InnoSenT iSYS4001 radar sensor. It provides a hig
   (this example uses `Serial2` on **GPIO16** for RX and **GPIO17** for TX).  
 - Power the sensor according to its datasheet specifications.  
 
-![ESP32 Wiring Schematic](images/ESP_Schemetic.png)
+![ESP32 Wiring Schematic](images/ESP_Schemetic.PNG)
 
 ---
 
