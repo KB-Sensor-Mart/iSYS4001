@@ -1322,7 +1322,7 @@ Key constants and limits:
 - Empty lists with `TARGET_LIST_OK`: Increase thresholds (range/velocity/signal) or reposition the sensor for better SNR.
 
 ### Versioning & compatibility
-- Library version: see `library.properties` (currently `1.0.0`).
+- Library version: see `library.properties` (currently `1.0.2`).
 - The public API (headers) is considered stable; breaking changes will bump the minor/major version.
 
 ### Authors
